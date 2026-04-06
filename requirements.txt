@@ -1,0 +1,11 @@
+pandas
+numpy
+networkx
+scipy
+matplotlib
+openpyxl
+dune-client
+scikit-learn
+xgboost
+torch
+torch-geometric
