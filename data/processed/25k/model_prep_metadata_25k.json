@@ -1,0 +1,33 @@
+{
+  "train_time_cutoff_utc": "2024-01-19 06:03:59+00:00",
+  "val_time_cutoff_utc": "2024-01-23 03:39:11+00:00",
+  "row_count": 26025,
+  "label_0_count": 25000,
+  "label_1_count": 1025,
+  "duplicate_tx_hashes_in_transactions": 0,
+  "duplicate_tx_hashes_in_labels": 0,
+  "orphan_label_hashes": 0,
+  "splits": [
+    {
+      "split": "test",
+      "label_0_count": 3737,
+      "label_1_count": 167,
+      "total_count": 3904,
+      "positive_rate": 0.0427766393442623
+    },
+    {
+      "split": "train",
+      "label_0_count": 17522,
+      "label_1_count": 695,
+      "total_count": 18217,
+      "positive_rate": 0.03815117747159247
+    },
+    {
+      "split": "val",
+      "label_0_count": 3741,
+      "label_1_count": 163,
+      "total_count": 3904,
+      "positive_rate": 0.04175204918032787
+    }
+  ]
+}

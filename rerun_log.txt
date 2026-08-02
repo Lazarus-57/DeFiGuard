@@ -1,0 +1,279 @@
+
+================================================================================
+Command: python scripts/100k/graph_pipeline_100k_peel.py
+================================================================================
+Source file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\raw\100k\eth_transfers_100k_2024.csv
+Output directory: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only
+Original transactions: 100000
+
+Peel-chain target rate: 0.0400
+Peel-chain count: 1017
+Peel-chain transactions: 4144
+
+Total augmented transactions: 104144
+Total positives: 4144
+Actual positive rate: 0.0398
+
+Saved augmented dataset to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\augmented_transactions.csv
+Saved label mapping to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\transaction_labels.csv
+Saved wallet features to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\wallet_features.csv
+Seed used: 42
+
+================================================================================
+Command: python scripts/model_prep.py --transactions data/processed/100k/peel_only/augmented_transactions.csv --labels data/processed/100k/peel_only/transaction_labels.csv --output data/processed/100k/peel_only/modeling_dataset.csv --summary data/processed/100k/peel_only/modeling_split_summary.csv --metadata data/processed/100k/peel_only/model_prep_metadata.json
+================================================================================
+Model-prep completed.
+Saved modeling dataset to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\modeling_dataset.csv
+Saved split summary to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\modeling_split_summary.csv
+Saved prep metadata to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\model_prep_metadata.json
+Rows: 104144
+Label 0: 100000
+Label 1: 4144
+
+================================================================================
+Command: python scripts/100k/phase1_model_selection.py --data data/processed/100k/peel_only/modeling_dataset.csv
+================================================================================
+========================================================================================
+PHASE 1 STEP 1 - TRADITIONAL MODEL COMPARISON (VALIDATION SPLIT)
+========================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\modeling_dataset.csv
+Train rows: 72900 | Positives: 2848 | Negatives: 70052
+Val rows: 15622 | Positives: 638 | Negatives: 14984
+Feature count: 15
+Seed: 42
+----------------------------------------------------------------------------------------
+             model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  train_seconds  best_iteration
+           XGBoost      0.1236       0.8455  0.2218         0.1271      0.8715                0.0     0.4773         0.3507               0
+LogisticRegression      0.0838       0.6645  0.1872         0.2725      0.1426                0.0     1.0000         0.1797              -1
+      RandomForest      0.0243       0.2265  0.0785         0.0408      1.0000                0.0     0.0000         2.0594              -1
+----------------------------------------------------------------------------------------
+Recommended winner for next step: XGBoost (best val_pr_auc=0.1236)
+
+================================================================================
+Command: python scripts/100k/phase1_step2_xgb_gnn_comparison.py --data data/processed/100k/peel_only/modeling_dataset.csv
+================================================================================
+========================================================================================================
+PHASE 1 STEP 2 (UPDATED) - BASE MODEL VS BASE MODEL + GRAPHSAGE (VALIDATION SPLIT)
+========================================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\modeling_dataset.csv
+Train rows: 72900 | Positives: 2848 | Negatives: 70052
+Val rows: 15622 | Positives: 638 | Negatives: 14984
+Base feature count: 15 | Hybrid feature count: 47
+Train graph wallets: 39510 | Edge mode: directed | Node feature mode: deg
+GNN tuned config: epochs=240, hidden_dim=16, emb_dim=16, lr=0.003, wd=0.0001, dropout=0.0, seed=42
+--------------------------------------------------------------------------------------------------------
+         model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  feature_count  train_seconds  best_iteration
+XGB (Baseline)      0.1238       0.8461  0.2222         0.1273      0.8715                0.0     0.5149             15         0.2868               0
+ XGB+GraphSAGE      0.1009       0.7854  0.2341         0.1352      0.8715                0.0     0.3180             47         4.2839              63
+--------------------------------------------------------------------------------------------------------
+Recommended winner for next step: XGB (Baseline) (best val_pr_auc=0.1238)
+Delta (XGB+GraphSAGE - XGB baseline) on val_pr_auc: -0.0230
+
+================================================================================
+Command: python scripts/100k/phase1_step3_layer3_comparison.py --data data/processed/100k/peel_only/modeling_dataset.csv
+================================================================================
+============================================================================================================
+LAYER 3 (UPDATED) - BASE MODEL VS BASE MODEL+NTS (VALIDATION SPLIT)
+============================================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_only\modeling_dataset.csv
+Train rows: 72900 | Positives: 2848 | Negatives: 70052
+Val rows: 15622 | Positives: 638 | Negatives: 14984
+Seed: 42 | NTS mode: spread_abs | Base model: xgb
+Include GNN embeddings: False
+NTS is computed from TRAIN split only and mapped to VAL.
+------------------------------------------------------------------------------------------------------------
+         model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  feature_count  train_seconds  best_iteration
+XGB (Baseline)      0.1238       0.8461  0.2222         0.1273      0.8715                0.0     0.5149             15         0.2524               0
+       XGB+NTS      0.0999       0.7533  0.1819         0.1001      1.0000                0.0     0.4750             19         0.2374               0
+------------------------------------------------------------------------------------------------------------
+Recommended winner for next step: XGB (Baseline) (best val_pr_auc=0.1238, delta_vs_baseline=-0.0239)
+
+================================================================================
+Command: python scripts/100k/graph_pipeline_100k_peel_smurf.py
+================================================================================
+Source file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\raw\100k\eth_transfers_100k_2024.csv
+Output directory: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf
+Original transactions: 100000
+
+Peel-chain target rate: 0.0400
+Peel-chain count: 1017
+Peel-chain transactions: 4144
+
+Smurfing target rate: 0.0300
+Smurfing cluster count: 298
+Smurfing transactions: 3076
+
+Total augmented transactions: 107220
+Total positives: 7220
+Actual positive rate: 0.0673
+
+Saved augmented dataset to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\augmented_transactions.csv
+Saved label mapping to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\transaction_labels.csv
+Saved wallet features to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\wallet_features.csv
+Seed used: 42
+
+================================================================================
+Command: python scripts/model_prep.py --transactions data/processed/100k/peel_smurf/augmented_transactions.csv --labels data/processed/100k/peel_smurf/transaction_labels.csv --output data/processed/100k/peel_smurf/modeling_dataset.csv --summary data/processed/100k/peel_smurf/modeling_split_summary.csv --metadata data/processed/100k/peel_smurf/model_prep_metadata.json
+================================================================================
+Model-prep completed.
+Saved modeling dataset to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\modeling_dataset.csv
+Saved split summary to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\modeling_split_summary.csv
+Saved prep metadata to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\model_prep_metadata.json
+Rows: 107220
+Label 0: 100000
+Label 1: 7220
+
+================================================================================
+Command: python scripts/100k/phase1_model_selection.py --data data/processed/100k/peel_smurf/modeling_dataset.csv
+================================================================================
+========================================================================================
+PHASE 1 STEP 1 - TRADITIONAL MODEL COMPARISON (VALIDATION SPLIT)
+========================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\modeling_dataset.csv
+Train rows: 75054 | Positives: 4990 | Negatives: 70064
+Val rows: 16083 | Positives: 1102 | Negatives: 14981
+Feature count: 15
+Seed: 42
+----------------------------------------------------------------------------------------
+             model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  train_seconds  best_iteration
+           XGBoost      0.1273       0.6621  0.2500         0.1488      0.7804                0.0     0.4957         0.3542               3
+LogisticRegression      0.1267       0.6376  0.2088         0.1205      0.7840                0.0     1.0000         0.2058              -1
+      RandomForest      0.0475       0.3342  0.1333         0.0722      0.8657                0.0     0.0578         2.0871              -1
+----------------------------------------------------------------------------------------
+Recommended winner for next step: XGBoost (best val_pr_auc=0.1273)
+
+================================================================================
+Command: python scripts/100k/phase1_step2_xgb_gnn_comparison.py --data data/processed/100k/peel_smurf/modeling_dataset.csv
+================================================================================
+========================================================================================================
+PHASE 1 STEP 2 (UPDATED) - BASE MODEL VS BASE MODEL + GRAPHSAGE (VALIDATION SPLIT)
+========================================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\modeling_dataset.csv
+Train rows: 75054 | Positives: 4990 | Negatives: 70064
+Val rows: 16083 | Positives: 1102 | Negatives: 14981
+Base feature count: 15 | Hybrid feature count: 47
+Train graph wallets: 40903 | Edge mode: directed | Node feature mode: deg
+GNN tuned config: epochs=240, hidden_dim=16, emb_dim=16, lr=0.003, wd=0.0001, dropout=0.0, seed=42
+--------------------------------------------------------------------------------------------------------
+         model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  feature_count  train_seconds  best_iteration
+ XGB+GraphSAGE      0.2102       0.8451  0.3884         0.2587      0.7786                0.0     0.3422             47         4.4815              76
+XGB (Baseline)      0.1563       0.7995  0.2670         0.1608      0.7858                0.0     0.5149             15         0.3309               0
+--------------------------------------------------------------------------------------------------------
+Recommended winner for next step: XGB+GraphSAGE (best val_pr_auc=0.2102)
+Delta (XGB+GraphSAGE - XGB baseline) on val_pr_auc: +0.0539
+
+================================================================================
+Command: python scripts/100k/phase1_step3_layer3_comparison.py --data data/processed/100k/peel_smurf/modeling_dataset.csv --include-gnn-embeddings
+================================================================================
+============================================================================================================
+LAYER 3 (UPDATED) - BASE MODEL VS BASE MODEL+NTS (VALIDATION SPLIT)
+============================================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\peel_smurf\modeling_dataset.csv
+Train rows: 75054 | Positives: 4990 | Negatives: 70064
+Val rows: 16083 | Positives: 1102 | Negatives: 14981
+Seed: 42 | NTS mode: spread_abs | Base model: xgb
+Include GNN embeddings: True
+NTS is computed from TRAIN split only and mapped to VAL.
+------------------------------------------------------------------------------------------------------------
+         model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  feature_count  train_seconds  best_iteration
+       XGB+NTS      0.2653       0.8692  0.3676         0.2265      0.9755                0.0     0.6681             51         5.1565             102
+XGB (Baseline)      0.1589       0.8024  0.2715         0.1641      0.7868                0.0     0.5149             47         4.5679               0
+------------------------------------------------------------------------------------------------------------
+Recommended winner for next step: XGB+NTS (best val_pr_auc=0.2653, delta_vs_baseline=+0.1064)
+
+================================================================================
+Command: python scripts/100k/graph_pipeline_100k_all.py
+================================================================================
+Source file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\raw\100k\eth_transfers_100k_2024.csv
+Output directory: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns
+Original transactions: 100000
+
+Peel-chain target rate: 0.0400
+Peel-chain count: 1017
+Peel-chain transactions: 4144
+
+Smurfing target rate: 0.0300
+Smurfing cluster count: 298
+Smurfing transactions: 3076
+
+Circular target rate: 0.0300
+Circular rings count: 755
+Circular transactions: 3142
+
+Total augmented transactions: 110362
+Total positives: 10362
+Actual positive rate: 0.0939
+
+Saved augmented dataset to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\augmented_transactions.csv
+Saved label mapping to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\transaction_labels.csv
+Saved wallet features to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\wallet_features.csv
+Seed used: 42
+
+================================================================================
+Command: python scripts/model_prep.py --transactions data/processed/100k/all_patterns/augmented_transactions.csv --labels data/processed/100k/all_patterns/transaction_labels.csv --output data/processed/100k/all_patterns/modeling_dataset.csv --summary data/processed/100k/all_patterns/modeling_split_summary.csv --metadata data/processed/100k/all_patterns/model_prep_metadata.json
+================================================================================
+Model-prep completed.
+Saved modeling dataset to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\modeling_dataset.csv
+Saved split summary to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\modeling_split_summary.csv
+Saved prep metadata to C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\model_prep_metadata.json
+Rows: 110362
+Label 0: 100000
+Label 1: 10362
+
+================================================================================
+Command: python scripts/100k/phase1_model_selection.py --data data/processed/100k/all_patterns/modeling_dataset.csv
+================================================================================
+========================================================================================
+PHASE 1 STEP 1 - TRADITIONAL MODEL COMPARISON (VALIDATION SPLIT)
+========================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\modeling_dataset.csv
+Train rows: 77253 | Positives: 7190 | Negatives: 70063
+Val rows: 16554 | Positives: 1581 | Negatives: 14973
+Feature count: 15
+Seed: 42
+----------------------------------------------------------------------------------------
+             model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  train_seconds  best_iteration
+           XGBoost      0.2196       0.8006  0.3459         0.2201      0.8071             0.0000     0.5103         0.4537               0
+LogisticRegression      0.2167       0.6594  0.2874         0.6636      0.1834             0.0013     1.0000         0.1823              -1
+      RandomForest      0.0760       0.3495  0.1744         0.0955      1.0000             0.0000     0.0000         2.2009              -1
+----------------------------------------------------------------------------------------
+Recommended winner for next step: XGBoost (best val_pr_auc=0.2196)
+
+================================================================================
+Command: python scripts/100k/phase1_step2_xgb_gnn_comparison.py --data data/processed/100k/all_patterns/modeling_dataset.csv
+================================================================================
+========================================================================================================
+PHASE 1 STEP 2 (UPDATED) - BASE MODEL VS BASE MODEL + GRAPHSAGE (VALIDATION SPLIT)
+========================================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\modeling_dataset.csv
+Train rows: 77253 | Positives: 7190 | Negatives: 70063
+Val rows: 16554 | Positives: 1581 | Negatives: 14973
+Base feature count: 15 | Hybrid feature count: 47
+Train graph wallets: 42793 | Edge mode: directed | Node feature mode: deg
+GNN tuned config: epochs=240, hidden_dim=16, emb_dim=16, lr=0.003, wd=0.0001, dropout=0.0, seed=42
+--------------------------------------------------------------------------------------------------------
+         model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  feature_count  train_seconds  best_iteration
+XGB (Baseline)      0.2405       0.8191  0.3684         0.2387      0.8071                0.0     0.5004             15         0.3381               1
+ XGB+GraphSAGE      0.2090       0.7919  0.3469         0.2210      0.8071                0.0     0.4866             47         3.9678               0
+--------------------------------------------------------------------------------------------------------
+Recommended winner for next step: XGB (Baseline) (best val_pr_auc=0.2405)
+Delta (XGB+GraphSAGE - XGB baseline) on val_pr_auc: -0.0315
+
+================================================================================
+Command: python scripts/100k/phase1_step3_layer3_comparison.py --data data/processed/100k/all_patterns/modeling_dataset.csv
+================================================================================
+============================================================================================================
+LAYER 3 (UPDATED) - BASE MODEL VS BASE MODEL+NTS (VALIDATION SPLIT)
+============================================================================================================
+Data file: C:\Users\joshu\OneDrive\Desktop\Work\COLLEGE\CAPSTONE PROJECT\DEFIGUARD\data\processed\100k\all_patterns\modeling_dataset.csv
+Train rows: 77253 | Positives: 7190 | Negatives: 70063
+Val rows: 16554 | Positives: 1581 | Negatives: 14973
+Seed: 42 | NTS mode: spread_abs | Base model: xgb
+Include GNN embeddings: False
+NTS is computed from TRAIN split only and mapped to VAL.
+------------------------------------------------------------------------------------------------------------
+         model  val_pr_auc  val_roc_auc  val_f1  val_precision  val_recall  val_recall_at_p80  threshold  feature_count  train_seconds  best_iteration
+       XGB+NTS      0.2438       0.8240  0.3798         0.2483      0.8077                0.0     0.4757             19         0.2721               0
+XGB (Baseline)      0.2405       0.8191  0.3684         0.2387      0.8071                0.0     0.5004             15         0.2853               1
+------------------------------------------------------------------------------------------------------------
+Recommended winner for next step: XGB+NTS (best val_pr_auc=0.2438, delta_vs_baseline=+0.0033)

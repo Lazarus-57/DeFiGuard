@@ -58,7 +58,7 @@ def _build_wallet_features(transactions: pd.DataFrame) -> pd.DataFrame:
     features["flow_ratio"] = features["out_degree"].where(total_degree > 0, 0) / total_degree.where(total_degree > 0, 1)
 
     pagerank = nx.pagerank(graph) if graph.number_of_nodes() > 0 else {}
-    betweenness = nx.betweenness_centrality(graph) if graph.number_of_nodes() > 0 else {}
+    betweenness = nx.betweenness_centrality(graph, k=100, seed=42) if graph.number_of_nodes() > 0 else {}
 
     features["pagerank"] = features["wallet"].map(pagerank).fillna(0.0)
     features["betweenness"] = features["wallet"].map(betweenness).fillna(0.0)
@@ -170,11 +170,18 @@ def _attach_wallet_features(dataset: pd.DataFrame, wallet_features: pd.DataFrame
 
 
 def _create_modeling_table(transactions: pd.DataFrame, labels: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    def _pick_label_note(s: pd.Series) -> str:
+        """Return the first non-normal label_note, or 'normal'."""
+        for val in s.astype(str):
+            if val != "normal":
+                return val
+        return "normal"
+
     label_lookup = (
         labels.groupby("tx_hash", as_index=False)
         .agg(
             aml_label=("aml_label", "max"),
-            label_note=("label_note", lambda s: "peel_chain" if (s.astype(str) == "peel_chain").any() else "normal"),
+            label_note=("label_note", _pick_label_note),
         )
     )
 
