@@ -7,7 +7,7 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent if SCRIPT_DIR.name.lower() == "scripts" else SCRIPT_DIR
+PROJECT_ROOT = SCRIPT_DIR.parents[1]
 
 
 def _resolve_user_path(path_arg: str) -> Path:

@@ -4,8 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     average_precision_score,
     f1_score,
@@ -14,8 +12,6 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 try:
@@ -28,7 +24,7 @@ except ImportError as exc:
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parents[1]
+PROJECT_ROOT = SCRIPT_DIR.parents[2]
 
 
 class GraphSAGEEncoder(nn.Module):
@@ -122,81 +118,46 @@ def _evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> dict:
     }
 
 
-def _fit_model(
+def _fit_xgboost(
     X_train: pd.DataFrame,
     y_train: np.ndarray,
     X_val: pd.DataFrame,
     y_val: np.ndarray,
     seed: int,
-    model_name: str,
-    params: dict | None,
+    params: dict,
 ) -> tuple[np.ndarray, int, float]:
     neg_count = float(np.sum(y_train == 0))
     pos_count = float(np.sum(y_train == 1))
     if pos_count == 0:
         raise ValueError("Training split has zero positive labels; cannot train AML classifier.")
 
-    if model_name == "xgb":
-        if params is None:
-            raise ValueError("Missing XGBoost params for training.")
-        model = XGBClassifier(
-            objective="binary:logistic",
-            eval_metric="aucpr",
-            tree_method="hist",
-            booster="gbtree",
-            n_estimators=params["n_estimators"],
-            learning_rate=params["learning_rate"],
-            max_depth=params["max_depth"],
-            min_child_weight=params["min_child_weight"],
-            subsample=params["subsample"],
-            colsample_bytree=params["colsample_bytree"],
-            reg_alpha=0.0,
-            reg_lambda=1.0,
-            gamma=0.0,
-            scale_pos_weight=neg_count / pos_count,
-            random_state=seed,
-            n_jobs=-1,
-            early_stopping_rounds=50,
-        )
-        start = time.perf_counter()
-        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
-        train_seconds = time.perf_counter() - start
-        y_prob = model.predict_proba(X_val)[:, 1]
-        best_iteration = int(getattr(model, "best_iteration", -1))
-        return y_prob, best_iteration, train_seconds
-
-    if model_name == "rf":
-        model = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=10,
-            min_samples_split=5,
-            class_weight="balanced_subsample",
-            random_state=seed,
-            n_jobs=-1,
-        )
-    elif model_name == "lr":
-        model = Pipeline(
-            steps=[
-                ("scaler", StandardScaler()),
-                (
-                    "model",
-                    LogisticRegression(
-                        max_iter=2000,
-                        class_weight="balanced",
-                        random_state=seed,
-                        solver="lbfgs",
-                    ),
-                ),
-            ]
-        )
-    else:
-        raise ValueError(f"Unknown base model: {model_name}")
+    model = XGBClassifier(
+        objective="binary:logistic",
+        eval_metric="aucpr",
+        tree_method="hist",
+        booster="gbtree",
+        n_estimators=params["n_estimators"],
+        learning_rate=params["learning_rate"],
+        max_depth=params["max_depth"],
+        min_child_weight=params["min_child_weight"],
+        subsample=params["subsample"],
+        colsample_bytree=params["colsample_bytree"],
+        reg_alpha=0.0,
+        reg_lambda=1.0,
+        gamma=0.0,
+        scale_pos_weight=neg_count / pos_count,
+        random_state=seed,
+        n_jobs=-1,
+        early_stopping_rounds=50,
+    )
 
     start = time.perf_counter()
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
     train_seconds = time.perf_counter() - start
+
     y_prob = model.predict_proba(X_val)[:, 1]
-    return y_prob, -1, train_seconds
+    best_iteration = int(getattr(model, "best_iteration", -1))
+    return y_prob, best_iteration, train_seconds
 
 
 def _build_wallet_graph_inputs(
@@ -358,13 +319,10 @@ def _attach_gnn_embeddings(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Phase 1 Step 2 (updated): base model vs base model + GraphSAGE embeddings on validation split."
-        )
+        description="Phase 1 Step 2 (updated): tuned standalone XGBoost vs tuned XGBoost+GraphSAGE on validation split."
     )
-    parser.add_argument("--data", default="data/processed/25k/modeling_dataset_transactions_25k_multi.csv")
+    parser.add_argument("--data", default="data/processed/5k/modeling_dataset_transactions.csv")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--base-model", default="xgb", choices=["xgb", "rf", "lr"])
 
     # Best GNN setup found in Layer 2 sweep.
     parser.add_argument("--gnn-hidden-dim", type=int, default=16)
@@ -417,20 +375,16 @@ def main() -> None:
         "colsample_bytree": 0.8,
     }
 
-    baseline_params = baseline_xgb_params if args.base_model == "xgb" else None
-    gnn_params = gnn_xgb_params if args.base_model == "xgb" else None
-
-    baseline_prob, baseline_best_iter, baseline_seconds = _fit_model(
+    baseline_prob, baseline_best_iter, baseline_seconds = _fit_xgboost(
         X_train=X_train_base,
         y_train=y_train,
         X_val=X_val_base,
         y_val=y_val,
         seed=args.seed,
-        model_name=args.base_model,
-        params=baseline_params,
+        params=baseline_xgb_params,
     )
     baseline_metrics = _evaluate_probs(y_val, baseline_prob)
-    baseline_metrics["model"] = f"{args.base_model.upper()} (Baseline)"
+    baseline_metrics["model"] = "XGBoost (Baseline tuned)"
     baseline_metrics["feature_count"] = int(X_train_base.shape[1])
     baseline_metrics["train_seconds"] = float(baseline_seconds)
     baseline_metrics["best_iteration"] = int(baseline_best_iter)
@@ -471,17 +425,16 @@ def main() -> None:
         wallet_embeddings=wallet_embeddings,
     )
 
-    hybrid_prob, hybrid_best_iter, hybrid_xgb_seconds = _fit_model(
+    hybrid_prob, hybrid_best_iter, hybrid_xgb_seconds = _fit_xgboost(
         X_train=X_train_hybrid,
         y_train=y_train,
         X_val=X_val_hybrid,
         y_val=y_val,
         seed=args.seed,
-        model_name=args.base_model,
-        params=gnn_params,
+        params=gnn_xgb_params,
     )
     hybrid_metrics = _evaluate_probs(y_val, hybrid_prob)
-    hybrid_metrics["model"] = f"{args.base_model.upper()}+GraphSAGE"
+    hybrid_metrics["model"] = "XGBoost+GraphSAGE (GNN tuned)"
     hybrid_metrics["feature_count"] = int(X_train_hybrid.shape[1])
     hybrid_metrics["train_seconds"] = float(gnn_train_seconds + hybrid_xgb_seconds)
     hybrid_metrics["best_iteration"] = int(hybrid_best_iter)
@@ -489,7 +442,7 @@ def main() -> None:
     results_df = pd.DataFrame([baseline_metrics, hybrid_metrics]).sort_values("val_pr_auc", ascending=False).reset_index(drop=True)
 
     print("=" * 104)
-    print("PHASE 1 STEP 2 (UPDATED) - BASE MODEL VS BASE MODEL + GRAPHSAGE (VALIDATION SPLIT)")
+    print("PHASE 1 STEP 2 (UPDATED) - TUNED XGBOOST VS TUNED XGBOOST + GRAPHSAGE (VALIDATION SPLIT)")
     print("=" * 104)
     print(f"Data file: {data_path}")
     print(f"Train rows: {len(train_df)} | Positives: {int(np.sum(y_train == 1))} | Negatives: {int(np.sum(y_train == 0))}")
@@ -534,10 +487,7 @@ def main() -> None:
         "Recommended winner for next step: "
         f"{winner['model']} (best val_pr_auc={winner['val_pr_auc']:.4f})"
     )
-    print(
-        f"Delta ({args.base_model.upper()}+GraphSAGE - {args.base_model.upper()} baseline) on val_pr_auc: "
-        f"{delta:+.4f}"
-    )
+    print(f"Delta (XGBoost+GraphSAGE tuned - XGBoost tuned) on val_pr_auc: {delta:+.4f}")
 
 
 if __name__ == "__main__":

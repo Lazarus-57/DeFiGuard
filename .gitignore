@@ -29,6 +29,7 @@ venv/
 ENV/
 env/
 .venv/
+.venv*/
 
 # IDEs
 .vscode/
@@ -47,6 +48,7 @@ data/processed/*.json
 # Reports and outputs
 reports/*.html
 reports/*.png
+Phase 1/Phase 1 Reports/*.csv
 *.pdf
 
 # Project-specific

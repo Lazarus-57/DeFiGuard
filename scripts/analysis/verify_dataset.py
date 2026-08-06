@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent if SCRIPT_DIR.name.lower() == "scripts" else SCRIPT_DIR
+PROJECT_ROOT = SCRIPT_DIR.parents[1]
 
 parser = argparse.ArgumentParser(description="Verify dataset integrity.")
 parser.add_argument("pipeline", choices=["5k", "25k", "25k-multi", "100k-multi"], help="Which dataset to verify")

@@ -17,7 +17,7 @@ import sys
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent if SCRIPT_DIR.parent.name.lower() == "scripts" else SCRIPT_DIR.parent
-sys.path.append(str(PROJECT_ROOT / "scripts"))
+sys.path.append(str(PROJECT_ROOT / "scripts" / "pipeline"))
 
 from pattern_injection import generate_peel_chains, generate_smurf_clusters, generate_circular_laundering
 

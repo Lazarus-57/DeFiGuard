@@ -8,7 +8,7 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent if SCRIPT_DIR.name.lower() == "scripts" else SCRIPT_DIR
+PROJECT_ROOT = SCRIPT_DIR.parents[1]
 DATA_PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
 AUGMENTED_FILE = DATA_PROCESSED_DIR / "augmented_transactions_peel.csv"

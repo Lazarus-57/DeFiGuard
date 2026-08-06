@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     average_precision_score,
     f1_score,
@@ -12,6 +14,8 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 try:
@@ -24,7 +28,7 @@ except ImportError as exc:
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parents[1]
+PROJECT_ROOT = SCRIPT_DIR.parents[2]
 
 
 class GraphSAGEEncoder(nn.Module):
@@ -61,7 +65,7 @@ def _resolve_user_path(path_arg: str) -> Path:
     return (PROJECT_ROOT / path).resolve()
 
 
-def _prepare_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_base_features(df: pd.DataFrame) -> pd.DataFrame:
     drop_cols = {
         "transaction_id",
         "tx_hash",
@@ -74,11 +78,67 @@ def _prepare_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
     }
     feature_cols = [c for c in df.columns if c not in drop_cols]
     X = df[feature_cols].copy()
-
     for col in X.columns:
         X[col] = pd.to_numeric(X[col], errors="coerce")
-
     return X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+
+def _safe_minmax(series: pd.Series) -> pd.Series:
+    vmin = float(series.min())
+    vmax = float(series.max())
+    if np.isclose(vmin, vmax):
+        return pd.Series(np.zeros(len(series), dtype=float), index=series.index)
+    return (series - vmin) / (vmax - vmin)
+
+
+def _compute_nts_map(train_df: pd.DataFrame, mode: str = "spread_abs") -> dict[str, float]:
+    local = train_df[["from", "to", "block_time"]].copy()
+    local["block_time"] = pd.to_datetime(local["block_time"], utc=True, errors="coerce")
+    local = local.dropna(subset=["from", "to", "block_time"])
+
+    in_stats = local.groupby("to")["block_time"].agg(["min", "max", "count"])
+    out_stats = local.groupby("from")["block_time"].agg(["min", "max", "count"])
+
+    in_spread = (in_stats["max"] - in_stats["min"]).dt.total_seconds()
+    out_spread = (out_stats["max"] - out_stats["min"]).dt.total_seconds()
+
+    wallets = pd.Index(in_spread.index).union(out_spread.index)
+    in_spread = in_spread.reindex(wallets).fillna(0.0)
+    out_spread = out_spread.reindex(wallets).fillna(0.0)
+
+    if mode == "spread_abs":
+        theta = (out_spread - in_spread).abs()
+    elif mode == "spread_signed":
+        theta = out_spread - in_spread
+    elif mode == "intensity":
+        in_cnt = in_stats["count"].reindex(wallets).fillna(0.0)
+        out_cnt = out_stats["count"].reindex(wallets).fillna(0.0)
+        theta = (out_cnt - in_cnt).abs() / (out_cnt + in_cnt + 1e-9)
+    else:
+        raise ValueError(f"Unknown nts mode: {mode}")
+
+    nts = _safe_minmax(theta)
+    return nts.to_dict()
+
+
+def _attach_nts_features(tx_df: pd.DataFrame, base_X: pd.DataFrame, nts_map: dict[str, float]) -> pd.DataFrame:
+    from_wallet = tx_df["from"].fillna("")
+    to_wallet = tx_df["to"].fillna("")
+
+    from_nts = from_wallet.map(nts_map).fillna(0.0).astype(float)
+    to_nts = to_wallet.map(nts_map).fillna(0.0).astype(float)
+
+    nts_df = pd.DataFrame(
+        {
+            "from_nts": from_nts,
+            "to_nts": to_nts,
+            "nts_max": np.maximum(from_nts, to_nts),
+            "nts_mean": (from_nts + to_nts) / 2.0,
+        },
+        index=tx_df.index,
+    )
+
+    return pd.concat([base_X.reset_index(drop=True), nts_df.reset_index(drop=True)], axis=1)
 
 
 def _best_f1_threshold(y_true: np.ndarray, y_prob: np.ndarray) -> float:
@@ -91,8 +151,7 @@ def _best_f1_threshold(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     denom = p + r
     num = 2 * p * r
     f1 = np.divide(num, denom, out=np.zeros_like(num, dtype=float), where=denom > 0)
-    best_idx = int(np.nanargmax(f1))
-    return float(thresholds[best_idx])
+    return float(thresholds[int(np.nanargmax(f1))])
 
 
 def _recall_at_precision_target(y_true: np.ndarray, y_prob: np.ndarray, target_precision: float = 0.80) -> float:
@@ -118,46 +177,81 @@ def _evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> dict:
     }
 
 
-def _fit_xgboost(
+def _fit_model(
     X_train: pd.DataFrame,
     y_train: np.ndarray,
     X_val: pd.DataFrame,
     y_val: np.ndarray,
     seed: int,
-    params: dict,
+    model_name: str,
+    params: dict | None,
 ) -> tuple[np.ndarray, int, float]:
     neg_count = float(np.sum(y_train == 0))
     pos_count = float(np.sum(y_train == 1))
     if pos_count == 0:
         raise ValueError("Training split has zero positive labels; cannot train AML classifier.")
 
-    model = XGBClassifier(
-        objective="binary:logistic",
-        eval_metric="aucpr",
-        tree_method="hist",
-        booster="gbtree",
-        n_estimators=params["n_estimators"],
-        learning_rate=params["learning_rate"],
-        max_depth=params["max_depth"],
-        min_child_weight=params["min_child_weight"],
-        subsample=params["subsample"],
-        colsample_bytree=params["colsample_bytree"],
-        reg_alpha=0.0,
-        reg_lambda=1.0,
-        gamma=0.0,
-        scale_pos_weight=neg_count / pos_count,
-        random_state=seed,
-        n_jobs=-1,
-        early_stopping_rounds=50,
-    )
+    if model_name == "xgb":
+        if params is None:
+            raise ValueError("Missing XGBoost params for training.")
+        model = XGBClassifier(
+            objective="binary:logistic",
+            eval_metric="aucpr",
+            tree_method="hist",
+            booster="gbtree",
+            n_estimators=params["n_estimators"],
+            learning_rate=params["learning_rate"],
+            max_depth=params["max_depth"],
+            min_child_weight=params["min_child_weight"],
+            subsample=params["subsample"],
+            colsample_bytree=params["colsample_bytree"],
+            reg_alpha=0.0,
+            reg_lambda=1.0,
+            gamma=0.0,
+            scale_pos_weight=neg_count / pos_count,
+            random_state=seed,
+            n_jobs=-1,
+            early_stopping_rounds=50,
+        )
+        start = time.perf_counter()
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+        elapsed = time.perf_counter() - start
+        y_prob = model.predict_proba(X_val)[:, 1]
+        best_iteration = int(getattr(model, "best_iteration", -1))
+        return y_prob, best_iteration, elapsed
+
+    if model_name == "rf":
+        model = RandomForestClassifier(
+            n_estimators=200,
+            max_depth=10,
+            min_samples_split=5,
+            class_weight="balanced_subsample",
+            random_state=seed,
+            n_jobs=-1,
+        )
+    elif model_name == "lr":
+        model = Pipeline(
+            steps=[
+                ("scaler", StandardScaler()),
+                (
+                    "model",
+                    LogisticRegression(
+                        max_iter=2000,
+                        class_weight="balanced",
+                        random_state=seed,
+                        solver="lbfgs",
+                    ),
+                ),
+            ]
+        )
+    else:
+        raise ValueError(f"Unknown base model: {model_name}")
 
     start = time.perf_counter()
-    model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
-    train_seconds = time.perf_counter() - start
-
+    model.fit(X_train, y_train)
+    elapsed = time.perf_counter() - start
     y_prob = model.predict_proba(X_val)[:, 1]
-    best_iteration = int(getattr(model, "best_iteration", -1))
-    return y_prob, best_iteration, train_seconds
+    return y_prob, -1, elapsed
 
 
 def _build_wallet_graph_inputs(
@@ -319,12 +413,13 @@ def _attach_gnn_embeddings(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Phase 1 Step 2 (updated): tuned standalone XGBoost vs tuned XGBoost+GraphSAGE on validation split."
+        description="Layer 3 (updated): base model vs base model + NTS."
     )
-    parser.add_argument("--data", default="data/processed/5k/modeling_dataset_transactions.csv")
+    parser.add_argument("--data", default="data/processed/25k/modeling_dataset_transactions_25k_multi.csv")
     parser.add_argument("--seed", type=int, default=42)
-
-    # Best GNN setup found in Layer 2 sweep.
+    parser.add_argument("--base-model", default="xgb", choices=["xgb", "rf", "lr"])
+    parser.add_argument("--nts-mode", default="spread_abs", choices=["spread_abs", "spread_signed", "intensity"])
+    parser.add_argument("--include-gnn-embeddings", action="store_true")
     parser.add_argument("--gnn-hidden-dim", type=int, default=16)
     parser.add_argument("--gnn-emb-dim", type=int, default=16)
     parser.add_argument("--gnn-epochs", type=int, default=240)
@@ -335,13 +430,12 @@ def main() -> None:
     parser.add_argument("--gnn-node-feature-mode", default="deg", choices=["deg", "deg+flow"])
     parser.add_argument("--gnn-wallet-label-mode", default="any_pos", choices=["any_pos", "sender_pos_only"])
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
-
     args = parser.parse_args()
 
     data_path = _resolve_user_path(args.data)
     df = pd.read_csv(data_path)
 
-    required_cols = {"split", "aml_label", "from", "to"}
+    required_cols = {"split", "aml_label", "from", "to", "block_time"}
     missing = sorted(required_cols - set(df.columns))
     if missing:
         raise ValueError(f"Input dataset missing required columns: {missing}")
@@ -352,13 +446,57 @@ def main() -> None:
     if train_df.empty or val_df.empty:
         raise ValueError("Train or validation split is empty in the provided dataset.")
 
-    X_train_base = _prepare_feature_matrix(train_df)
-    X_val_base = _prepare_feature_matrix(val_df)
     y_train = train_df["aml_label"].astype(int).to_numpy()
     y_val = val_df["aml_label"].astype(int).to_numpy()
 
-    # Tuned baseline and tuned GNN-side XGBoost settings discovered in sweep.
-    baseline_xgb_params = {
+    X_train_base = _prepare_base_features(train_df)
+    X_val_base = _prepare_base_features(val_df)
+
+    if args.include_gnn_embeddings:
+        wallets, wallet_to_idx, x_nodes, edge_index, y_wallet = _build_wallet_graph_inputs(
+            train_df=train_df,
+            edge_mode=args.gnn_edge_mode,
+            node_feature_mode=args.gnn_node_feature_mode,
+            wallet_label_mode=args.gnn_wallet_label_mode,
+        )
+
+        gnn_train_start = time.perf_counter()
+        wallet_embeddings = _train_wallet_gnn(
+            x=x_nodes,
+            edge_index=edge_index,
+            y_wallet=y_wallet,
+            seed=args.seed,
+            hidden_dim=args.gnn_hidden_dim,
+            emb_dim=args.gnn_emb_dim,
+            epochs=args.gnn_epochs,
+            lr=args.gnn_lr,
+            weight_decay=args.gnn_weight_decay,
+            dropout=args.gnn_dropout,
+            device=args.device,
+        ).numpy()
+        gnn_train_seconds = time.perf_counter() - gnn_train_start
+
+        X_train_base = _attach_gnn_embeddings(
+            base_X=X_train_base,
+            tx_df=train_df,
+            wallet_to_idx=wallet_to_idx,
+            wallet_embeddings=wallet_embeddings,
+        )
+        X_val_base = _attach_gnn_embeddings(
+            base_X=X_val_base,
+            tx_df=val_df,
+            wallet_to_idx=wallet_to_idx,
+            wallet_embeddings=wallet_embeddings,
+        )
+    else:
+        gnn_train_seconds = 0.0
+
+    nts_map = _compute_nts_map(train_df, mode=args.nts_mode)
+    X_train_nts = _attach_nts_features(train_df, X_train_base, nts_map)
+    X_val_nts = _attach_nts_features(val_df, X_val_base, nts_map)
+
+    # Best baseline and best NTS-oriented settings from the sweep runs.
+    baseline_params = {
         "n_estimators": 400,
         "learning_rate": 0.03,
         "max_depth": 4,
@@ -366,95 +504,53 @@ def main() -> None:
         "subsample": 1.0,
         "colsample_bytree": 0.8,
     }
-    gnn_xgb_params = {
-        "n_estimators": 400,
-        "learning_rate": 0.03,
+    nts_params = {
+        "n_estimators": 600,
+        "learning_rate": 0.05,
         "max_depth": 6,
-        "min_child_weight": 3,
+        "min_child_weight": 1,
         "subsample": 0.8,
-        "colsample_bytree": 0.8,
+        "colsample_bytree": 1.0,
     }
 
-    baseline_prob, baseline_best_iter, baseline_seconds = _fit_xgboost(
-        X_train=X_train_base,
-        y_train=y_train,
-        X_val=X_val_base,
-        y_val=y_val,
-        seed=args.seed,
-        params=baseline_xgb_params,
-    )
-    baseline_metrics = _evaluate_probs(y_val, baseline_prob)
-    baseline_metrics["model"] = "XGBoost (Baseline tuned)"
-    baseline_metrics["feature_count"] = int(X_train_base.shape[1])
-    baseline_metrics["train_seconds"] = float(baseline_seconds)
-    baseline_metrics["best_iteration"] = int(baseline_best_iter)
+    base_params = baseline_params if args.base_model == "xgb" else None
+    nts_model_params = nts_params if args.base_model == "xgb" else None
 
-    wallets, wallet_to_idx, x_nodes, edge_index, y_wallet = _build_wallet_graph_inputs(
-        train_df=train_df,
-        edge_mode=args.gnn_edge_mode,
-        node_feature_mode=args.gnn_node_feature_mode,
-        wallet_label_mode=args.gnn_wallet_label_mode,
-    )
+    scenarios = [
+        (f"{args.base_model.upper()} (Baseline)", X_train_base, X_val_base, base_params),
+        (f"{args.base_model.upper()}+NTS", X_train_nts, X_val_nts, nts_model_params),
+    ]
 
-    gnn_train_start = time.perf_counter()
-    wallet_embeddings = _train_wallet_gnn(
-        x=x_nodes,
-        edge_index=edge_index,
-        y_wallet=y_wallet,
-        seed=args.seed,
-        hidden_dim=args.gnn_hidden_dim,
-        emb_dim=args.gnn_emb_dim,
-        epochs=args.gnn_epochs,
-        lr=args.gnn_lr,
-        weight_decay=args.gnn_weight_decay,
-        dropout=args.gnn_dropout,
-        device=args.device,
-    ).numpy()
-    gnn_train_seconds = time.perf_counter() - gnn_train_start
+    results = []
+    for name, X_train, X_val, params in scenarios:
+        y_prob, best_iteration, train_seconds = _fit_model(
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            seed=args.seed,
+            model_name=args.base_model,
+            params=params,
+        )
+        metrics = _evaluate_probs(y_val, y_prob)
+        metrics["model"] = name
+        metrics["feature_count"] = int(X_train.shape[1])
+        metrics["train_seconds"] = float(train_seconds + gnn_train_seconds)
+        metrics["best_iteration"] = int(best_iteration)
+        results.append(metrics)
 
-    X_train_hybrid = _attach_gnn_embeddings(
-        base_X=X_train_base,
-        tx_df=train_df,
-        wallet_to_idx=wallet_to_idx,
-        wallet_embeddings=wallet_embeddings,
-    )
-    X_val_hybrid = _attach_gnn_embeddings(
-        base_X=X_val_base,
-        tx_df=val_df,
-        wallet_to_idx=wallet_to_idx,
-        wallet_embeddings=wallet_embeddings,
-    )
+    results_df = pd.DataFrame(results).sort_values("val_pr_auc", ascending=False).reset_index(drop=True)
 
-    hybrid_prob, hybrid_best_iter, hybrid_xgb_seconds = _fit_xgboost(
-        X_train=X_train_hybrid,
-        y_train=y_train,
-        X_val=X_val_hybrid,
-        y_val=y_val,
-        seed=args.seed,
-        params=gnn_xgb_params,
-    )
-    hybrid_metrics = _evaluate_probs(y_val, hybrid_prob)
-    hybrid_metrics["model"] = "XGBoost+GraphSAGE (GNN tuned)"
-    hybrid_metrics["feature_count"] = int(X_train_hybrid.shape[1])
-    hybrid_metrics["train_seconds"] = float(gnn_train_seconds + hybrid_xgb_seconds)
-    hybrid_metrics["best_iteration"] = int(hybrid_best_iter)
-
-    results_df = pd.DataFrame([baseline_metrics, hybrid_metrics]).sort_values("val_pr_auc", ascending=False).reset_index(drop=True)
-
-    print("=" * 104)
-    print("PHASE 1 STEP 2 (UPDATED) - TUNED XGBOOST VS TUNED XGBOOST + GRAPHSAGE (VALIDATION SPLIT)")
-    print("=" * 104)
+    print("=" * 108)
+    print("LAYER 3 (UPDATED) - BASE MODEL VS BASE MODEL+NTS (VALIDATION SPLIT)")
+    print("=" * 108)
     print(f"Data file: {data_path}")
     print(f"Train rows: {len(train_df)} | Positives: {int(np.sum(y_train == 1))} | Negatives: {int(np.sum(y_train == 0))}")
     print(f"Val rows: {len(val_df)} | Positives: {int(np.sum(y_val == 1))} | Negatives: {int(np.sum(y_val == 0))}")
-    print(f"Base feature count: {X_train_base.shape[1]} | Hybrid feature count: {X_train_hybrid.shape[1]}")
-    print(f"Train graph wallets: {len(wallets)} | Edge mode: {args.gnn_edge_mode} | Node feature mode: {args.gnn_node_feature_mode}")
-    print(
-        "GNN tuned config: "
-        f"epochs={args.gnn_epochs}, hidden_dim={args.gnn_hidden_dim}, emb_dim={args.gnn_emb_dim}, "
-        f"lr={args.gnn_lr}, wd={args.gnn_weight_decay}, dropout={args.gnn_dropout}, seed={args.seed}"
-    )
-    print("-" * 104)
+    print(f"Seed: {args.seed} | NTS mode: {args.nts_mode} | Base model: {args.base_model}")
+    print(f"Include GNN embeddings: {args.include_gnn_embeddings}")
+    print("NTS is computed from TRAIN split only and mapped to VAL.")
+    print("-" * 108)
 
     display_cols = [
         "model",
@@ -476,18 +572,16 @@ def main() -> None:
         printable[col] = printable[col].astype(float).round(4)
 
     print(printable.to_string(index=False))
-    print("-" * 104)
+    print("-" * 108)
 
+    baseline_pr_auc = float(results_df.loc[results_df["model"] == f"{args.base_model.upper()} (Baseline)", "val_pr_auc"].iloc[0])
+    nts_pr_auc = float(results_df.loc[results_df["model"] == f"{args.base_model.upper()}+NTS", "val_pr_auc"].iloc[0])
     winner = results_df.iloc[0]
-    baseline_pr_auc = float(baseline_metrics["val_pr_auc"])
-    hybrid_pr_auc = float(hybrid_metrics["val_pr_auc"])
-    delta = hybrid_pr_auc - baseline_pr_auc
 
     print(
         "Recommended winner for next step: "
-        f"{winner['model']} (best val_pr_auc={winner['val_pr_auc']:.4f})"
+        f"{winner['model']} (best val_pr_auc={winner['val_pr_auc']:.4f}, delta_vs_baseline={nts_pr_auc - baseline_pr_auc:+.4f})"
     )
-    print(f"Delta (XGBoost+GraphSAGE tuned - XGBoost tuned) on val_pr_auc: {delta:+.4f}")
 
 
 if __name__ == "__main__":

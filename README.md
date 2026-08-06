@@ -70,9 +70,11 @@ Raw Transactions
 DEFIGUARD/
 ├── Phase 1/                        # ← The complete Phase 1 ML deliverable
 │   ├── scripts/
-│   │   ├── inference.py            # ← Backend API: call predict(df) to run the model
-│   │   ├── phase1_master_training.py  # ← Master training script (re-runnable)
-│   │   └── phase1_25k_inference_test.py  # ← Out-of-sample stress test
+│   │   ├── 01_evaluate_100k_test.py # ← Run this: blind-test evaluation
+│   │   ├── 02_run_25k_stress_test.py # ← Optional out-of-sample stress test
+│   │   └── inference.py             # ← Backend API: call predict(df) to run the model
+│   ├── Advanced/
+│   │   └── phase1_master_training.py # ← Rebuilds artifacts; do not run for normal use
 │   ├── Phase 1 Models/             # ← All serialized model artifacts
 │   │   ├── master_hybrid_model.json
 │   │   ├── gnn_wallet_embeddings.pkl
@@ -84,16 +86,15 @@ DEFIGUARD/
 │   │   ├── test_metrics.json
 │   │   ├── shap_summary.png
 │   │   └── 25k_inference_results.csv
-│   └── walkthrough.md              # ← Full Phase 1 explanation + handoff guide
+│   └── Explanation/                # ← Walkthrough and Phase 1 handoff guide
 │
-├── scripts/                        # ← Core pipeline scripts (shared across datasets)
-│   ├── download_dune.py            # Data collection from Dune Analytics
-│   ├── graph_pipeline.py           # Graph feature engineering
-│   ├── model_prep.py               # Train/val/test split + feature table prep
-│   ├── pattern_injection.py        # Synthetic laundering pattern generator
-│   ├── 5k/                         # 5k prototype experiments
-│   ├── 25k/                        # 25k architecture validation experiments
-│   └── 100k/                       # 100k gold-standard experiments
+├── scripts/                        # ← Historical pipeline and experiment code
+│   ├── pipeline/                   # Data collection, feature engineering, and pattern injection
+│   ├── analysis/                   # Dataset checks, visualisation, and diagnostic reports
+│   ├── experiments/                # Earlier dataset-scale experiment history
+│       ├── 5k/                     # Prototype experiments
+│       ├── 25k/                    # Architecture-validation experiments
+│   └── 100k/                       # Gold-standard experiments (used by run_rerun.py)
 │
 ├── data/
 │   ├── raw/                        # Raw Ethereum transaction CSVs
@@ -106,19 +107,80 @@ DEFIGUARD/
 │   ├── 25k/
 │   └── 100k/
 │
+├── docs/                           # Project documentation and exported reports
+│   ├── experiments/                # 25k/100k experiment summaries
+│   └── reports/                    # Capstone PDF reports
+│
+├── tools/                          # Utilities for generating project reports
+│
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Quick Start: Using the Inference API (Phase 2 Developers)
+## Run Phase 1 Results (Start Here)
+
+Use this section to verify the completed Phase 1 model. It evaluates the saved model on the untouched 100k test split; it does **not** retrain or overwrite the model.
+
+### 1. Create the tested Python environment
+
+Run these commands from the `DEFIGUARD` folder in PowerShell:
+
+```powershell
+py -3.10 -m venv .venv310
+.\.venv310\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install shap "xgboost==2.1.4"
+```
+
+> If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass` once, then activate the environment again.
+
+### 2. Run the blind-test evaluation
+
+```powershell
+python ".\Phase 1\scripts\01_evaluate_100k_test.py"
+```
+
+Expected headline metrics:
+
+```text
+Test Transactions: 16,555
+ROC-AUC: 0.9330
+PR-AUC: 0.4694
+Precision: 0.4427
+Recall: 0.9686
+F1 Score: 0.6076
+```
+
+This is the final Phase 1 test: the model was trained on the training split, its threshold was selected on the validation split, and these 16,555 test transactions were held back for final evaluation.
+
+### 3. Optional: run the 25k stress test
+
+```powershell
+python ".\Phase 1\scripts\02_run_25k_stress_test.py"
+```
+
+This is an out-of-distribution stress test on the legacy 25k dataset. It is useful for demonstrating temporal anomaly detection, but it is not the primary accuracy evaluation.
+
+### Do not run this during normal use
+
+`Phase 1/Advanced/phase1_master_training.py` retrains the model and overwrites the stored Phase 1 artifacts. Run it only when deliberately reproducing the full training pipeline.
+
+---
+
+## Use the Inference API (Phase 2 Developers)
 
 The entire ML pipeline is wrapped in a single callable class. You do not need to understand GNNs or NTS to use it.
 
 ```python
 import pandas as pd
-from Phase_1.scripts.inference import DefiGuardInference
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path("Phase 1/scripts").resolve()))
+from inference import DefiGuardInference
 
 # Load once at application startup
 ml_engine = DefiGuardInference()
@@ -134,31 +196,19 @@ results = ml_engine.predict(raw_df)
 # - top_shap_reason  (the primary feature driving the alert)
 ```
 
-See `Phase 1/walkthrough.md` for the full handoff guide.
+See `Phase 1/Explanation/walkthrough.md` for the full handoff guide.
 
 ---
 
-## Reproducing the Results
+## Advanced: Reproduce Training
 
-### 1. Environment
+Only use this workflow when you intentionally want to regenerate the serialized model, embeddings, NTS map, SHAP explainer, reports, and metrics:
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+```powershell
+python ".\Phase 1\Advanced\phase1_master_training.py"
 ```
 
-### 2. Re-run Master Training
-
-```bash
-python "Phase 1/scripts/phase1_master_training.py"
-```
-
-### 3. Run 25k Out-of-Sample Stress Test
-
-```bash
-python "Phase 1/scripts/phase1_25k_inference_test.py"
-```
+This can take substantial time and overwrites the existing Phase 1 artifacts. For normal verification, use `01_evaluate_100k_test.py` instead.
 
 ---
 
@@ -185,7 +235,7 @@ python "Phase 1/scripts/phase1_25k_inference_test.py"
 
 ## License
 
-Add your preferred license (MIT/Apache-2.0) before public release.
+None
 
 ## Acknowledgement
 
