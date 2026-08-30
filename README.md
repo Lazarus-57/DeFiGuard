@@ -1,4 +1,4 @@
-# DeFIGuard: ML-Powered Anti-Money Laundering for DeFi Transactions
+# DeFiGuard: ML-Powered Anti-Money Laundering for DeFi Transactions
 
 [![Phase](https://img.shields.io/badge/Phase-1%20Complete-brightgreen)]()
 [![Dataset](https://img.shields.io/badge/Dataset-100k%20Transactions-blue)]()
@@ -6,7 +6,7 @@
 [![ROC--AUC](https://img.shields.io/badge/ROC--AUC-0.933-orange)]()
 [![Recall](https://img.shields.io/badge/Recall-96.8%25-red)]()
 
-DeFIGuard is a production-ready machine learning pipeline for detecting money laundering patterns in DeFi blockchain transactions. It combines **Graph Neural Networks (GNN)**, **Temporal Intelligence (NTS)**, and **XGBoost** into a single hybrid detection engine with full **SHAP-based explainability** — capable of flagging suspicious wallets, classifying the laundering pattern type, and explaining *why* the transaction was flagged.
+DeFiGuard is a production-ready machine learning pipeline for detecting money laundering patterns in DeFi blockchain transactions. It combines **Graph Neural Networks (GNN)**, **Temporal Intelligence (NTS)**, and **XGBoost** into a single hybrid detection engine with full **SHAP-based explainability** — capable of flagging suspicious wallets, classifying the laundering pattern type, and explaining *why* the transaction was flagged.
 
 ---
 
