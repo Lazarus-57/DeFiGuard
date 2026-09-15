@@ -10,7 +10,7 @@ DeFiGuard is a production-ready machine learning pipeline for detecting money la
 
 ---
 
-### Results Achieved (100k Gold Standard Dataset) [Test Set]
+### Results Achieved on Test Set evaluation (Dataset contains >110,000 transactions)
 
 | Metric | Score |
 |---|---|
