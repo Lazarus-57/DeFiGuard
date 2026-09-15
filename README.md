@@ -166,9 +166,9 @@ This is an out-of-distribution stress test on the legacy 25k dataset. It is usef
 
 ---
 
-## Use the Inference API (Phase 2 Developers)
+## Use the Inference API (If running locally)
 
-The entire ML pipeline is wrapped in a single callable class. You do not need to understand GNNs or NTS to use it.
+The entire ML pipeline is wrapped in a single callable class
 
 ```python
 import pandas as pd
@@ -215,8 +215,8 @@ This can take substantial time and overwrites the existing Phase 1 artifacts. Fo
 | Prototype | 5k txns | Peel Chain only, baseline models | ✅ Done |
 | Validation | 25k txns | Add Smurfing, fix temporal leakage bug | ✅ Done |
 | Gold Standard | 100k txns | All 3 patterns, full hybrid model | ✅ Done |
-| **Phase 1** | **100k txns** | **Master model, SHAP, inference API** | ✅ **Complete** |
-| Phase 2 | — | Backend API + Frontend Visualization | 🔜 Next |
+| **100k txns** | **Master model, SHAP, inference API** | ✅ Done |
+| Backend API + Frontend Visualization | ✅ Done |
 
 ---
 
