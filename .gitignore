@@ -55,3 +55,5 @@ Phase 1/Phase 1 Reports/*.csv
 .env
 config.local.py
 dune_api_key
+Frontend/node_modules/
+node_modules/
