@@ -214,9 +214,8 @@ This can take substantial time and overwrites the existing Phase 1 artifacts. Fo
 |---|---|---|---|
 | Prototype | 5k txns | Peel Chain only, baseline models | ✅ Done |
 | Validation | 25k txns | Add Smurfing, fix temporal leakage bug | ✅ Done |
-| Gold Standard | 100k txns | All 3 patterns, full hybrid model | ✅ Done |
-| **100k txns** | **Master model, SHAP, inference API** | ✅ Done |
-| Backend API + Frontend Visualization | ✅ Done |
+| Dataset | 100k txns | All 3 patterns, full hybrid model | ✅ Done |
+| Frontend Visualization and Backend API| N/A | Create a seamless website and interface for the model | ✅ Done |
 
 ---
 
