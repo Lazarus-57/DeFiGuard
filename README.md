@@ -1,4 +1,4 @@
-# DeFIGuard: ML-Powered Anti-Money Laundering for DeFi Transactions
+# DeFiGuard: ML-Powered Anti-Money Laundering for DeFi Transactions
 
 [![Phase](https://img.shields.io/badge/Phase-1%20Complete-brightgreen)]()
 [![Dataset](https://img.shields.io/badge/Dataset-100k%20Transactions-blue)]()
@@ -6,15 +6,11 @@
 [![ROC--AUC](https://img.shields.io/badge/ROC--AUC-0.933-orange)]()
 [![Recall](https://img.shields.io/badge/Recall-96.8%25-red)]()
 
-DeFIGuard is a production-ready machine learning pipeline for detecting money laundering patterns in DeFi blockchain transactions. It combines **Graph Neural Networks (GNN)**, **Temporal Intelligence (NTS)**, and **XGBoost** into a single hybrid detection engine with full **SHAP-based explainability** — capable of flagging suspicious wallets, classifying the laundering pattern type, and explaining *why* the transaction was flagged.
+DeFiGuard is a production-ready machine learning pipeline for detecting money laundering patterns in DeFi blockchain transactions. It combines **Graph Neural Networks (GNN)**, **Temporal Intelligence (NTS)**, and **XGBoost** into a single hybrid detection engine with full **SHAP-based explainability** — capable of flagging suspicious wallets, classifying the laundering pattern type, and explaining *why* the transaction was flagged.
 
 ---
 
-## Current Status: Phase 1 Complete ✅
-
-All machine learning work is complete. The trained model and its inference API are ready for backend/frontend integration (Phase 2).
-
-### Final Test Set Metrics (100k Gold Standard Dataset)
+### Results Achieved on Test Set evaluation (Dataset contains >110,000 transactions)
 
 | Metric | Score |
 |---|---|
@@ -170,9 +166,9 @@ This is an out-of-distribution stress test on the legacy 25k dataset. It is usef
 
 ---
 
-## Use the Inference API (Phase 2 Developers)
+## Use the Inference API (If running locally)
 
-The entire ML pipeline is wrapped in a single callable class. You do not need to understand GNNs or NTS to use it.
+The entire ML pipeline is wrapped in a single callable class
 
 ```python
 import pandas as pd
@@ -218,18 +214,8 @@ This can take substantial time and overwrites the existing Phase 1 artifacts. Fo
 |---|---|---|---|
 | Prototype | 5k txns | Peel Chain only, baseline models | ✅ Done |
 | Validation | 25k txns | Add Smurfing, fix temporal leakage bug | ✅ Done |
-| Gold Standard | 100k txns | All 3 patterns, full hybrid model | ✅ Done |
-| **Phase 1** | **100k txns** | **Master model, SHAP, inference API** | ✅ **Complete** |
-| Phase 2 | — | Backend API + Frontend Visualization | 🔜 Next |
-
----
-
-## Roadmap: Phase 2
-
-1. **Backend API** — Wrap `inference.py` in FastAPI/Flask with file-upload endpoint
-2. **Graph Visualization** — Integrate Graphistry or PyVis to render flagged transaction networks
-3. **Frontend UI** — Dashboard for uploading CSVs, viewing alerts, and inspecting SHAP explanations
-4. **Real-World Labels** — Integrate sanctions/scam lists for ground truth enrichment
+| Dataset | 100k txns | All 3 patterns, full hybrid model | ✅ Done |
+| Frontend Visualization and Backend API| N/A | Create a seamless website and interface for the model | ✅ Done |
 
 ---
 

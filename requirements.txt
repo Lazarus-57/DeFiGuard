@@ -9,3 +9,6 @@ scikit-learn
 xgboost
 torch
 torch-geometric
+fastapi
+uvicorn
+python-multipart
