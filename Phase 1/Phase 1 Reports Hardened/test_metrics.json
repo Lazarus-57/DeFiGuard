@@ -1,0 +1,12 @@
+{
+    "test_pr_auc": 0.284106170419546,
+    "test_roc_auc": 0.8681293492933265,
+    "test_f1": 0.4203004229254776,
+    "test_precision": 0.2670991658943466,
+    "test_recall": 0.9856361149110807,
+    "decision_threshold": 0.20000001788139343,
+    "brier_score_loss": 0.06441396530602655,
+    "precision_at_0.1pct": 0.75,
+    "precision_at_0.5pct": 0.6951219512195121,
+    "precision_at_1.0pct": 0.3878787878787879
+}

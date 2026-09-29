@@ -1,4 +1,4 @@
-# Python
+# Python & Caches
 __pycache__/
 *.py[cod]
 *$py.class
@@ -23,15 +23,14 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual environments
-.venv
+# Virtual Environments
+.venv/
 venv/
 ENV/
 env/
-.venv/
 .venv*/
 
-# IDEs
+# IDEs & System Files
 .vscode/
 .idea/
 *.swp
@@ -39,19 +38,21 @@ env/
 *~
 .DS_Store
 
-# Data (large files)
-data/raw/*.csv
-data/processed/*.csv
-data/processed/*.json
+# Frontend Dependencies
+node_modules/
+**/node_modules/
+
+# Datasets & Heavy Files (Ignores all CSVs and the entire data/ folder)
+data/
+*.csv
 *.parquet
 
-# Reports and outputs
+# Generated Reports & PDFs
 reports/*.html
 reports/*.png
-Phase 1/Phase 1 Reports/*.csv
 *.pdf
 
-# Project-specific
+# Local Configs & Keys
 .env
 config.local.py
 dune_api_key

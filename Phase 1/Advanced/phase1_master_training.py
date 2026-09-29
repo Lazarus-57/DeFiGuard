@@ -9,8 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     average_precision_score,
+    brier_score_loss,
     f1_score,
     precision_recall_curve,
     precision_score,
@@ -26,8 +28,8 @@ from torch_geometric.nn import SAGEConv
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
-MODELS_DIR = SCRIPT_DIR.parent / "Phase 1 Models"
-REPORTS_DIR = SCRIPT_DIR.parent / "Phase 1 Reports"
+MODELS_DIR = SCRIPT_DIR.parent / "Phase 1 Models Hardened"
+REPORTS_DIR = SCRIPT_DIR.parent / "Phase 1 Reports Hardened"
 
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -223,10 +225,17 @@ def _best_f1_threshold(y_true, y_prob):
     f1 = np.divide(num, denom, out=np.zeros_like(num, dtype=float), where=denom > 0)
     return float(thresholds[int(np.nanargmax(f1))])
 
+def precision_at_k(y_true, scores, k_frac=0.01):
+    k = max(1, int(len(scores) * k_frac))
+    if k == 0:
+        return 0.0
+    top_indices = np.argsort(scores)[::-1][:k]
+    return float(y_true[top_indices].mean())
+
 
 def main():
     print("Loading datasets...")
-    data_path = PROJECT_ROOT / "data" / "processed" / "100k" / "all_patterns" / "modeling_dataset.csv"
+    data_path = PROJECT_ROOT / "data" / "processed" / "100k_hardened" / "modeling_dataset.csv"
     df = pd.read_csv(data_path)
 
     train_df = df[df["split"] == "train"].copy()
@@ -269,25 +278,36 @@ def main():
         eval_metric="aucpr",
         tree_method="hist",
         booster="gbtree",
-        n_estimators=600,
-        learning_rate=0.05,
-        max_depth=6,
-        min_child_weight=1,
+        n_estimators=1000,        # More trees to learn from harder signal
+        learning_rate=0.01,       # Slower learning to find subtle patterns
+        max_depth=8,              # Deeper splits for complex flow patterns
+        min_child_weight=5,       # Prevent overfitting on noisy hardened signal
         subsample=0.8,
-        colsample_bytree=1.0,
+        colsample_bytree=0.8,     # Slightly more regularisation
+        gamma=0.1,                # Minimum loss reduction for split
+        reg_alpha=0.05,           # L1 regularisation
+        reg_lambda=1.5,           # L2 regularisation
         scale_pos_weight=neg_count / pos_count,
         random_state=42,
         n_jobs=-1,
-        early_stopping_rounds=50,
+        early_stopping_rounds=100,  # More patience for harder task
     )
     
     model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=True)
 
+    print("5b. Calibrating Probabilities (Isotonic) on Validation Set...")
+    calibrated_xgb = CalibratedClassifierCV(model, method="isotonic", cv="prefit")
+    calibrated_xgb.fit(X_val, y_val)
+
     print("6. Evaluating on Blind Test Set...")
-    y_prob_test = model.predict_proba(X_test)[:, 1]
+    y_prob_test = calibrated_xgb.predict_proba(X_test)[:, 1]
     
-    # We use validation set to pick the best F1 threshold, and apply it to test
-    y_prob_val = model.predict_proba(X_val)[:, 1]
+    # Measure calibration accuracy
+    brier = float(brier_score_loss(y_test, y_prob_test))
+    print(f"Brier Score Loss: {brier:.4f}")
+    
+    # We use validation set to pick the best F1 threshold for binary metrics
+    y_prob_val = calibrated_xgb.predict_proba(X_val)[:, 1]
     threshold = _best_f1_threshold(y_val, y_prob_val)
     
     y_pred_test = (y_prob_test >= threshold).astype(int)
@@ -298,7 +318,11 @@ def main():
         "test_f1": float(f1_score(y_test, y_pred_test, zero_division=0)),
         "test_precision": float(precision_score(y_test, y_pred_test, zero_division=0)),
         "test_recall": float(recall_score(y_test, y_pred_test, zero_division=0)),
-        "decision_threshold": threshold
+        "decision_threshold": threshold,
+        "brier_score_loss": brier,
+        "precision_at_0.1pct": precision_at_k(y_test, y_prob_test, 0.001),
+        "precision_at_0.5pct": precision_at_k(y_test, y_prob_test, 0.005),
+        "precision_at_1.0pct": precision_at_k(y_test, y_prob_test, 0.01),
     }
     
     print("Test Metrics:", metrics)
@@ -313,8 +337,39 @@ def main():
     plt.savefig(REPORTS_DIR / "shap_summary.png", bbox_inches='tight', dpi=300)
     plt.close()
 
+    # --- Top-feature audit on True Positives ---
+    y_pred_test_mask = (y_prob_test >= threshold).astype(int)
+    tp_mask = (y_test == 1) & (y_pred_test_mask == 1)
+    X_tp = X_test[tp_mask]
+    if len(X_tp) > 0:
+        shap_tp_raw = explainer.shap_values(X_tp)
+        if isinstance(shap_tp_raw, list):
+            shap_tp = shap_tp_raw[1] if len(shap_tp_raw) > 1 else shap_tp_raw[0]
+        elif hasattr(shap_tp_raw, "values"):
+            shap_tp = shap_tp_raw.values
+        else:
+            shap_tp = np.array(shap_tp_raw)
+        if shap_tp.ndim == 3:
+            shap_tp = shap_tp[:, :, 1]
+        mean_abs = np.abs(shap_tp).mean(axis=0)
+        shap_df = pd.DataFrame({"Feature": feature_names, "Mean_Abs_SHAP": mean_abs})
+        shap_df = shap_df.sort_values("Mean_Abs_SHAP", ascending=False).reset_index(drop=True)
+        print("\n--- TOP 10 SHAP FEATURES ON TRUE POSITIVES (Hardened) ---")
+        print(shap_df.head(10).to_string(index=False))
+        cheat_feats = {"from_in_degree", "to_in_degree", "from_out_degree", "to_out_degree", "from_pagerank", "to_pagerank"}
+        top5 = set(shap_df.head(5)["Feature"].tolist())
+        cheat_count = len(top5 & cheat_feats)
+        if cheat_count >= 2:
+            print("\n[WARNING] Static degree/pagerank features still dominating — model may still be cheating.")
+        else:
+            print("\n[PASS] Top features are flow/temporal/GNN — model is learning genuine AML behavior!")
+        shap_df.to_csv(REPORTS_DIR / "shap_top_features_tp.csv", index=False)
+
     print("8. Serializing Model Artifacts...")
     model.save_model(MODELS_DIR / "master_hybrid_model.json")
+    
+    with open(MODELS_DIR / "master_calibrated_model.pkl", "wb") as f:
+        pickle.dump(calibrated_xgb, f)
     
     with open(MODELS_DIR / "gnn_wallet_embeddings.pkl", "wb") as f:
         pickle.dump({"wallet_to_idx": wallet_to_idx, "embeddings": wallet_embeddings}, f)

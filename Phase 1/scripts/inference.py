@@ -17,9 +17,17 @@ class DefiGuardInference:
     def __init__(self, models_dir: str | Path = MODELS_DIR):
         self.models_dir = Path(models_dir)
         
-        # Load XGBoost Model
+        # Load XGBoost Model (Used for SHAP)
         self.model = xgb.XGBClassifier()
         self.model.load_model(self.models_dir / "master_hybrid_model.json")
+        
+        # Load Calibrated Model (Used for scoring)
+        try:
+            with open(self.models_dir / "master_calibrated_model.pkl", "rb") as f:
+                self.calibrated_model = pickle.load(f)
+        except Exception:
+            self.calibrated_model = None
+
         
         # Load Feature Names
         with open(self.models_dir / "feature_names.json", "r") as f:
@@ -122,7 +130,11 @@ class DefiGuardInference:
         X_final = X_final[self.feature_names]
 
         # 2. Model Prediction
-        y_prob = self.model.predict_proba(X_final)[:, 1]
+        if getattr(self, "calibrated_model", None) is not None:
+            y_prob = self.calibrated_model.predict_proba(X_final)[:, 1]
+        else:
+            y_prob = self.model.predict_proba(X_final)[:, 1]
+            
         y_pred = (y_prob >= self.threshold).astype(int)
         
         results_df["suspicion_score"] = y_prob

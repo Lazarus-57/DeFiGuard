@@ -56,11 +56,21 @@ def generate_peel_chains(
             wallets.append(wallet)
             used_wallets.add(wallet)
 
-        # Remaining wallets: fresh random addresses.
+        # Remaining wallets: anchor to real wallets when possible.
         for _ in range(chain_length - 1):
-            wallet = _random_eth_address(rng)
-            while wallet in used_wallets:
+            if _anchor_list:
+                wallet = rng.choice(_anchor_list)
+                # To avoid infinite loops if anchor list is small, we'll try 10 times
+                attempts = 0
+                while wallet in used_wallets and attempts < 10:
+                    wallet = rng.choice(_anchor_list)
+                    attempts += 1
+                if wallet in used_wallets:
+                    wallet = _random_eth_address(rng)
+            else:
                 wallet = _random_eth_address(rng)
+                while wallet in used_wallets:
+                    wallet = _random_eth_address(rng)
             wallets.append(wallet)
             used_wallets.add(wallet)
 
@@ -162,19 +172,37 @@ def generate_smurf_clusters(
                 source = _random_eth_address(rng)
             used_wallets.add(source)
 
-        # --- Mule wallets (always fresh) ---
+        # --- Mule wallets (anchored to real wallets when possible) ---
         mules: list[str] = []
         for _ in range(num_mules):
-            mule = _random_eth_address(rng)
-            while mule in used_wallets:
+            if _anchor_list:
+                mule = rng.choice(_anchor_list)
+                attempts = 0
+                while mule in used_wallets and attempts < 10:
+                    mule = rng.choice(_anchor_list)
+                    attempts += 1
+                if mule in used_wallets:
+                    mule = _random_eth_address(rng)
+            else:
                 mule = _random_eth_address(rng)
+                while mule in used_wallets:
+                    mule = _random_eth_address(rng)
             mules.append(mule)
             used_wallets.add(mule)
 
-        # --- Collector wallet (always fresh) ---
-        collector = _random_eth_address(rng)
-        while collector in used_wallets:
+        # --- Collector wallet (anchored to real wallet when possible) ---
+        if _anchor_list:
+            collector = rng.choice(_anchor_list)
+            attempts = 0
+            while collector in used_wallets and attempts < 10:
+                collector = rng.choice(_anchor_list)
+                attempts += 1
+            if collector in used_wallets:
+                collector = _random_eth_address(rng)
+        else:
             collector = _random_eth_address(rng)
+            while collector in used_wallets:
+                collector = _random_eth_address(rng)
         used_wallets.add(collector)
 
         # --- Total amount for this cluster ---
@@ -267,12 +295,21 @@ def generate_circular_laundering(
                 source = _random_eth_address(rng)
             used_wallets.add(source)
 
-        # --- Intermediary wallets (always fresh) ---
+        # --- Intermediary wallets (anchored to real wallets when possible) ---
         intermediaries: list[str] = []
         for _ in range(ring_size - 1):
-            hop = _random_eth_address(rng)
-            while hop in used_wallets:
+            if _anchor_list:
+                hop = rng.choice(_anchor_list)
+                attempts = 0
+                while hop in used_wallets and attempts < 10:
+                    hop = rng.choice(_anchor_list)
+                    attempts += 1
+                if hop in used_wallets:
+                    hop = _random_eth_address(rng)
+            else:
                 hop = _random_eth_address(rng)
+                while hop in used_wallets:
+                    hop = _random_eth_address(rng)
             intermediaries.append(hop)
             used_wallets.add(hop)
 
