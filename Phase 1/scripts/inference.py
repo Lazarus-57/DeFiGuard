@@ -10,7 +10,9 @@ import xgboost as xgb
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
-MODELS_DIR = SCRIPT_DIR.parent / "Phase 1 Models"
+MODELS_DIR = SCRIPT_DIR.parent / "Phase 1 Models Hardened"
+if not MODELS_DIR.exists():
+    MODELS_DIR = SCRIPT_DIR.parent / "Phase 1 Models"
 
 
 class DefiGuardInference:
