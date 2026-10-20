@@ -266,18 +266,29 @@ class DefiGuardInference:
         
         return results_df
 
-    def build_network_graph(self, results_df: pd.DataFrame, max_nodes: int = 150) -> dict:
+    def build_network_graph(self, results_df: pd.DataFrame, max_nodes: int = 300) -> dict:
         """
         Builds a node-link network graph for visualization in the frontend.
+        Always reserves 20% of node slots for clean transactions so the
+        suspicious/clean contrast is visible even when flagged count >> max_nodes.
         """
         if len(results_df) == 0:
             return {"nodes": [], "edges": [], "stats": {}}
 
-        # Prioritize flagged transactions first, then fill with other transactions
-        flagged_df = results_df[results_df["aml_flag"] == 1]
-        clean_df = results_df[results_df["aml_flag"] == 0]
-        
-        sample_df = pd.concat([flagged_df, clean_df.head(max(0, max_nodes - len(flagged_df)))]).head(max_nodes)
+        flagged_df = results_df[results_df["aml_flag"] == 1].sort_values(
+            "suspicion_score", ascending=False
+        )
+        clean_df = results_df[results_df["aml_flag"] == 0].sample(
+            frac=1, random_state=42
+        )
+
+        # Reserve 20 % of slots for clean nodes so they always appear
+        clean_slots = max(int(max_nodes * 0.20), min(30, len(clean_df)))
+        flagged_slots = max_nodes - clean_slots
+
+        sampled_flagged = flagged_df.head(flagged_slots)
+        sampled_clean   = clean_df.head(clean_slots)
+        sample_df = pd.concat([sampled_flagged, sampled_clean])
         
         wallet_stats = {}
         edges = []
@@ -320,6 +331,15 @@ class DefiGuardInference:
             wallet_stats[src]["maxScore"] = max(wallet_stats[src]["maxScore"], score)
             wallet_stats[dst]["maxScore"] = max(wallet_stats[dst]["maxScore"], score)
 
+            # Attach shap_breakdown so the frontend can render SHAP on node click
+            shap_bd = row.get("shap_breakdown", None)
+            if isinstance(shap_bd, str):
+                try:
+                    import json as _json
+                    shap_bd = _json.loads(shap_bd)
+                except Exception:
+                    shap_bd = None
+
             edges.append({
                 "id": tx_hash if tx_hash else f"{src}->{dst}_{len(edges)}",
                 "source": src,
@@ -328,6 +348,9 @@ class DefiGuardInference:
                 "suspicion_score": round(score, 4),
                 "is_flagged": is_flagged,
                 "pattern_type": pattern,
+                "tx_hash": tx_hash,
+                "shap_breakdown": shap_bd,
+                "top_shap_reason": str(row.get("top_shap_reason", "")),
             })
 
         nodes = list(wallet_stats.values())

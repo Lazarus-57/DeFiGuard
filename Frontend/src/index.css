@@ -628,19 +628,20 @@ a {
 .shap-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
+  gap: 8px;
+  padding: 5px 0;
 }
 
 .shap-bar__label {
-  width: 160px;
+  width: 120px;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-secondary);
   text-align: right;
   flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shap-bar__track {
@@ -677,27 +678,33 @@ a {
 
 .shap-component {
   display: flex;
-  gap: 12px;
-  margin: 12px 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
 }
 
 .shap-component__item {
-  flex: 1;
-  padding: 14px;
+  flex: 1 1 calc(33% - 8px);
+  min-width: 80px;
+  padding: 10px 8px;
   border-radius: var(--radius-md);
   text-align: center;
+  overflow: hidden;
 }
 
 .shap-component__label {
-  font-size: 0.72rem;
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shap-component__score {
-  font-size: 1.3rem;
+  font-size: 1.0rem;
   font-weight: 700;
   font-family: var(--font-mono);
 }
@@ -721,12 +728,28 @@ a {
 /* ── Network Graph ─────────────────────────────────────── */
 .graph-container {
   width: 100%;
-  height: 520px;
+  height: 700px;
   border-radius: var(--radius-md);
   background: rgba(6, 10, 20, 0.60);
   border: 1px solid var(--border-subtle);
   overflow: hidden;
 }
+
+/* Sidebar that appears alongside the graph on node click */
+.graph-sidebar {
+  width: 360px;
+  flex-shrink: 0;
+  max-height: 760px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-subtle) transparent;
+}
+.graph-sidebar::-webkit-scrollbar { width: 4px; }
+.graph-sidebar::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+
 
 .graph-legend {
   display: flex;

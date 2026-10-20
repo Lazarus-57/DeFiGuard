@@ -152,7 +152,7 @@ export default function App() {
             </div>
             <div className="card">
               <div className="card__body">
-                <NetworkGraph graphData={data.graph} />
+                <NetworkGraph graphData={data.graph} results={data.results} />
               </div>
             </div>
           </div>
