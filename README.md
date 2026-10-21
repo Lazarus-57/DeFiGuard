@@ -1,159 +1,233 @@
-# DeFiGuard: Explainable Graph-Temporal AML Intelligence for DeFi
+<div align="center">
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB.svg)](https://vitejs.dev/)
-[![ML Model](https://img.shields.io/badge/Model-Tri--Hybrid%20GNN%20%2B%20NTS%20%2B%20XGBoost-purple.svg)]()
-[![Explainability](https://img.shields.io/badge/XAI-TreeSHAP%20Decomposition-ff69b4.svg)]()
-[![Validation](https://img.shields.io/badge/Empirical%20Validation-Tornado%20Cash%20%7C%20Binance%20CEX%20%7C%20BigQuery-success.svg)]()
+# 🛡️ DeFiGuard
 
-**DeFiGuard** is an end-to-end, production-ready anti-money laundering (AML) forensic intelligence platform designed for EVM and DeFi blockchain networks. It addresses the fundamental flaw of legacy AML heuristic rules — **alert fatigue and lack of explainability** — by integrating **Graph Neural Networks (GraphSAGE)**, **Neural Temporal Sequential (NTS)** embeddings, and an **Isotonically Calibrated XGBoost Classifier** paired with **TreeSHAP local and global explainability**.
+### Explainable Graph-Temporal AML Intelligence for DeFi
 
-The system features a **Universal Ingestion & Normalization Engine** capable of ingesting raw transaction dumps from Google BigQuery, Etherscan, Dune Analytics, or Flipside, dynamically constructing wallet interaction graphs on the fly, and presenting interactive forensic network graphs with click-to-SHAP investigation drawers in real-time.
+*Detect laundering. Classify the pattern. Explain **why**.*
+
+<br/>
+
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![XGBoost](https://img.shields.io/badge/XGBoost-2.1.4-EB5F07?style=for-the-badge)
+![SHAP](https://img.shields.io/badge/Explainability-TreeSHAP-ff69b4?style=for-the-badge)
+
+![ROC-AUC](https://img.shields.io/badge/ROC--AUC-0.933-orange?style=flat-square)
+![Recall](https://img.shields.io/badge/Recall-98.5%25-red?style=flat-square)
+![Precision@0.50](https://img.shields.io/badge/Precision@0.50-68.5%25-blue?style=flat-square)
+![PR-AUC](https://img.shields.io/badge/PR--AUC-0.852-purple?style=flat-square)
+![Specificity](https://img.shields.io/badge/CEX%20Specificity-99.74%25-success?style=flat-square)
+![Sensitivity](https://img.shields.io/badge/Mixer%20Detection-100%25-success?style=flat-square)
+
+<br/>
+
+[**Overview**](#-overview) •
+[**Validation**](#-empirical-validation) •
+[**Metrics**](#-benchmark-metrics) •
+[**Architecture**](#-architecture) •
+[**Quick Start**](#-quick-start) •
+[**Structure**](#-repository-structure)
+
+</div>
 
 ---
 
-## 🌟 Key Highlights & Innovations
+## 📖 Overview
 
-1. **Tri-Hybrid Detection Architecture (51 Features)**:
-   - **GNN Structural Embeddings (32 features)**: Captures multi-hop wallet clustering, dispersion, and bipartite subgraph topologies via GraphSAGE.
-   - **Neural Temporal Sequential (NTS) Embeddings (4 features)**: Quantifies burst intervals, inter-arrival time compression, and rapid directional money flow.
-   - **Graph Centrality & Flow Baselines (15 features)**: PageRank, betweenness centrality, in/out degrees, and flow balance ratios.
-2. **Universal Dataset Normalization Intelligence**:
-   - Zero-config auto-detection of incoming CSV schemas (Etherscan, BigQuery, Dune, Flipside, generic EVM).
-   - Dynamic Wei $\leftrightarrow$ ETH scaling and address canonicalization.
-   - On-the-fly topological graph construction and centrality metric generation for raw un-engineered datasets.
-3. **Forensic Explainability (XAI)**:
-   - Real-time TreeSHAP risk attribution for every single transaction.
-   - Multi-layer contribution decomposition: **GNN Structural vs. NTS Temporal vs. Base Flow**.
-   - Automated plain-English investigator narratives explaining *why* an alert was triggered.
-4. **Interactive Cyber-Forensic Dashboard**:
-   - D3 force-directed network graph highlighting suspicious transactions (crimson) vs. clean operations (cyan).
-   - Searchable, filterable risk alerts table with instant CSV evidence export.
+**DeFiGuard** is an end-to-end anti-money laundering (AML) forensic platform for EVM / DeFi networks. It targets the core weakness of legacy rule-based AML — **alert fatigue and zero explainability** — by fusing three detection layers into one calibrated model:
+
+| Layer | What it captures |
+| :--- | :--- |
+| 🕸️ **GraphSAGE GNN** | Multi-hop wallet clustering, dispersion and bipartite structure |
+| ⏱️ **Neural Temporal Sequential (NTS)** | Burst intervals, inter-arrival compression, rapid directional flow |
+| 📈 **Graph Centrality Baseline** | PageRank, betweenness, in/out degree, flow-balance ratios |
+
+These feed an **isotonically calibrated XGBoost** classifier, with **TreeSHAP** explaining every individual alert.
+
+### ✨ Key Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+#### 🔌 Universal Ingestion Engine
+- Zero-config schema detection for **Etherscan, BigQuery, Dune, Flipside** and generic EVM CSVs
+- Automatic Wei ↔ ETH scaling and address canonicalization
+- Wallet graph + centrality metrics built **on the fly** from raw data
+
+</td>
+<td width="50%" valign="top">
+
+#### 🔍 Forensic Explainability
+- TreeSHAP attribution for **every** transaction
+- Layer decomposition: **GNN Structural vs. NTS Temporal vs. Base Flow**
+- Plain-English investigator narratives explaining *why* an alert fired
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+#### 🧠 Tri-Hybrid Model (51 Features)
+- 32 GNN structural embeddings
+- 4 NTS temporal features
+- 15 graph centrality & flow baselines
+
+</td>
+<td width="50%" valign="top">
+
+#### 🖥️ Interactive Forensic Dashboard
+- D3 force-directed graph: suspicious (crimson) vs. clean (cyan)
+- Click-to-SHAP investigation drawer
+- Searchable alerts table with one-click CSV export
+
+</td>
+</tr>
+</table>
 
 ---
 
-## 🔬 Empirical Validation: The Golden Triangle
+## 🔬 Empirical Validation
 
-DeFiGuard has been empirically verified across three distinct real-world blockchain testbeds to prove both **maximum sensitivity** to illicit contracts and **high-fidelity specificity** against alert fatigue:
+DeFiGuard was verified on three real-world testbeds covering **sensitivity**, **specificity** and **scalability**.
 
+| Testbed | Source | Scale | Volume | Alert Rate | What it proves |
+| :--- | :--- | :--- | :--- | :---: | :--- |
+| 🌪️ **Tornado Cash 100 ETH Pool** | Etherscan CSV | 230 txs / 133 wallets | 23,000.00 ETH | **100.0%** (230/230) | **Sensitivity** — zero false negatives on an OFAC-sanctioned mixer |
+| 🏦 **Binance Hot Wallet 14** | Etherscan CSV | 5,000 txs / 1,075 wallets | 42,670.92 ETH | **0.26%** (13/5,000) | **Specificity** — 99.74% clean pass; immune to alert fatigue on a huge exchange hub, while still catching fan-out smurfing withdrawals |
+| ⛓️ **Ethereum Mainnet Blocks** | Google BigQuery | 20,000 txs / 18,958 wallets | Multi-million ETH | Graduated tiers | **Scalability** — raw ledger stream parsed and graphed on the fly in seconds |
+
+```mermaid
+flowchart TB
+    T["🌪️ SENSITIVITY<br/>Tornado Cash 100 ETH<br/>230/230 flagged"]
+    B["🏦 SPECIFICITY<br/>Binance Hot Wallet 14<br/>4,987/5,000 clean"]
+    G["⛓️ SCALABILITY<br/>Google BigQuery<br/>20,000 txs · 18,958 wallets"]
+    D(("🛡️ DeFiGuard"))
+    T --> D
+    B --> D
+    G --> D
+    style D fill:#7c3aed,color:#fff,stroke:#a78bfa
+    style T fill:#7f1d1d,color:#fff
+    style B fill:#064e3b,color:#fff
+    style G fill:#1e3a8a,color:#fff
 ```
-                      [ DEFIGUARD EMPIRICAL TRIANGLE ]
-                                     ▲
-                                    / \
-                                   /   \
-        1. SENSITIVITY            /     \           2. SPECIFICITY
-       (High-Risk Detection)     /       \      (Alert Fatigue Resistance)
-     =======================    /         \    ============================
-       Tornado Cash 100 ETH    /___________\       Binance Hot Wallet 14
-        Pool (Etherscan)                            (Etherscan)
-        230 / 230 Flagged                          4,987 / 5,000 Clean
-        (100.0% Detection)                         (99.74% Specificity)
-                                      |
-                                      | 3. MACRO SCALABILITY
-                                      | (Real-World Organic Flow)
-                                      ▼
-                             Google BigQuery 
-                             20,000 Tx Ingestion
-                             18,958 Wallets on-the-fly
-```
-
-| Benchmark Testbed | Ingestion Source | Scale (Txs / Wallets) | Volume (ETH) | Alert Rate | Forensic Significance |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Tornado Cash 100 ETH Pool** | Etherscan CSV | 230 txs / 133 wallets | 23,000.00 ETH | **100.0%** ($230/230$) | **Sensitivity:** 0% false negatives on OFAC-sanctioned mixer contracts. |
-| **Binance Hot Wallet 14** | Etherscan CSV | 5,000 txs / 1,075 wallets | 42,670.92 ETH | **0.26%** ($13/5,000$) | **Specificity:** 99.74% clean pass rate; proves immunity to alert fatigue on massive exchange hubs while catching fan-out smurfing withdrawals. |
-| **Raw Ethereum Mainnet Blocks** | Google BigQuery | 20,000 txs / 18,958 wallets | Multi-Million ETH | Graduated Tier | **Scalability:** Full ledger stream parsed and graphed on the fly in seconds. |
 
 ---
 
-## 📊 Benchmark Test Metrics (110k Hardened Split)
+## 📊 Benchmark Metrics
 
-Evaluated on an out-of-sample, temporally-isolated test set of 16,555 transactions from the 110k gold-standard hardened dataset:
+Evaluated on an out-of-sample, temporally isolated test set of **16,555 transactions** from the 110k hardened gold-standard dataset.
 
-| Forensic Metric | Score | Industry Comparison |
+| Metric | Score | Interpretation |
+| :--- | :---: | :--- |
+| **ROC-AUC** | `0.933` | Strong separation of laundering vs. benign |
+| **Recall** | `98.5%` | Catches virtually all active laundering chains |
+| **Precision @ 0.50** | `68.5%` | Over 6.8× lower false-positive rate than legacy rules |
+| **PR-AUC** | `0.852` | Precision retained across recall operating points |
+| **Latency** | `< 1.8 ms / tx` | Real-time scoring throughput |
+
+---
+
+## 🧬 Laundering Patterns Detected
+
+| Pattern | Topology | Primary detectors |
 | :--- | :--- | :--- |
-| **ROC-AUC** | **0.933** | Discriminates laundering vs. benign with high confidence |
-| **Recall (Sensitivity)** | **98.5%** | Catches virtually all active laundering chains |
-| **Precision @ 0.50 Threshold** | **68.5%** | Over $6.8\times$ lower false positive rate than legacy rules |
-| **PR-AUC** | **0.852** | High precision retention across all recall operating thresholds |
-| **Inference Latency** | **< 1.8 ms / tx** | Sub-second real-time scoring throughput |
+| **Peel Chain** | `A → B → C → D` — linear value bleed through ephemeral addresses | NTS + Base |
+| **Smurfing** | `A → {M1, M2, …} → Target` — fan-out / fan-in via mule wallets | GraphSAGE GNN |
+| **Circular / Ring** | `A → B → C → A` — cyclic layering between colluding wallets | NTS + PageRank |
 
 ---
 
-## 🧬 Laundering Topologies Detected
+## 🏛️ Architecture
 
-```
-  [ PEEL CHAIN ]                [ SMURFING ]               [ CIRCULAR / CYCLE ]
- A ──► B ──► C ──► D         A ──► M1 ──► Target          A ──► B ──► C ──► A
- (Linear value bleed)        A ──► M2 ──► Target          (Layering wash trading)
- Primary: NTS + Base         Primary: GraphSAGE GNN       Primary: NTS + PageRank
-```
+```mermaid
+flowchart TD
+    A["📥 Raw Ingestion<br/>Etherscan · BigQuery · Dune · Flipside"] --> B
+    B["🧹 Normalization Intelligence<br/>Schema detection · Wei↔ETH · On-the-fly graph"] --> C
 
-1. **Peel Chains (Linear)**: A high-value deposit split into repeated small peeling outputs through ephemeral intermediary addresses.
-2. **Smurfing (Fan-Out / Fan-In)**: Rapid dispersion of funds across dozens of mule wallets before re-aggregating into an off-ramp.
-3. **Circular / Ring Routing (Cyclic)**: Layered transactions traversing cyclic loops between collaborating wallets to obfuscate transaction provenance.
+    subgraph C["🧠 51-Feature Tri-Hybrid Pipeline"]
+        direction LR
+        C1["GraphSAGE GNN<br/>32 features"]
+        C2["NTS Temporal<br/>4 features"]
+        C3["Graph Baseline<br/>15 features"]
+    end
+
+    C --> D["⚖️ Calibrated XGBoost"]
+    D --> E["📊 Risk Score<br/>0.0 – 1.0"]
+    D --> F["🔎 TreeSHAP Explainer<br/>Drivers & narratives"]
+    E --> G
+    F --> G["🚀 FastAPI Backend :8000<br/>/predict · /predict-csv · /normalize-preview · /model-info"]
+    G --> H["🖥️ React + Vite UI :3000<br/>Dashboard · D3 Graph · Click-to-SHAP"]
+
+    style D fill:#7c3aed,color:#fff
+    style G fill:#009688,color:#fff
+    style H fill:#0ea5e9,color:#fff
+```
 
 ---
 
-## 🏛️ System Architecture
+## 🚀 Quick Start
 
+**Prerequisites:** Python 3.10+ · Node.js 18+ · Windows / macOS / Linux
+
+### 1️⃣ Backend
+
+```bash
+git clone https://github.com/Lazarus-57/DeFIGuard.git
+cd DeFiGuard
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1        # Windows PowerShell
+# source .venv/bin/activate         # macOS / Linux
+
+pip install -r requirements.txt
+pip install shap "xgboost==2.1.4" fastapi uvicorn python-multipart
+
+python -m uvicorn api:app --port 8000
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             DEFIGUARD PLATFORM                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  [ RAW INGESTION ]                                                          │
-│  Etherscan CSV │ Google BigQuery │ Dune Analytics │ Flipside Crypto         │
-│         │                                                                   │
-│         ▼                                                                   │
-│  [ DATASET NORMALIZATION INTELLIGENCE ]                                     │
-│  • Schema Auto-Detection & Column Aliasing                                  │
-│  • Wei ↔ ETH Unit Harmonization                                             │
-│  • On-the-Fly Dynamic Graph Construction (PageRank, Degrees, Flow Ratios)   │
-│         │                                                                   │
-│         ▼                                                                   │
-│  [ 51-FEATURE TRI-HYBRID INFERENCE PIPELINE ]                               │
-│  ┌───────────────────────┬──────────────────────┬────────────────────────┐  │
-│  │  GraphSAGE GNN (32)   │  NTS Temporal (4)    │  Graph Flow Base (15)  │  │
-│  │  Structural Position  │  Burst Timing & Gaps │  Centrality & Volume   │  │
-│  └──────────┬────────────┴──────────┬───────────┴───────────┬────────────┘  │
-│             └───────────────────────┼───────────────────────┘               │
-│                                     ▼                                       │
-│                       [ CALIBRATED XGBOOST ENGINE ]                         │
-│                                     │                                       │
-│                    ┌────────────────┴───────────────┐                       │
-│                    ▼                                ▼                       │
-│          [ CALIBRATED RISK SCORE ]        [ TREESHAP EXPLAINER ]            │
-│          Probability (0.0 - 1.0)          Risk Drivers & Narratives         │
-│                    │                                │                       │
-│                    └────────────────┬───────────────┘                       │
-│                                     ▼                                       │
-│  [ FASTAPI REST BACKEND ] (Port 8000)                                       │
-│  /predict  •  /predict-csv  •  /normalize-preview  •  /model-info           │
-│                                     │                                       │
-│                                     ▼                                       │
-│  [ REACT + VITE FORENSIC UI ] (Port 3000)                                   │
-│  Executive Dashboard │ D3 Network Topology │ Click-to-SHAP Forensic Drawer  │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+
+> API runs at `http://127.0.0.1:8000` — interactive docs at `/docs`.
+
+### 2️⃣ Frontend
+
+In a second terminal:
+
+```bash
+cd Frontend
+npm install
+npm run dev
 ```
+
+> Open **http://localhost:3000**
+
+### 3️⃣ Test Any Dataset
+
+1. Open the dashboard and go to the **Upload** tab.
+2. Drop in any Ethereum transaction CSV, or click a pre-configured **Etherscan / BigQuery / Dune** sample card.
+3. The ingestion engine auto-detects the provider, scales Wei → ETH, and builds the wallet graph.
+4. Explore the **Dashboard**, the **D3 Network Graph**, click any flagged node for its **TreeSHAP explanation**, and export the forensic CSV.
 
 ---
 
 ## 📂 Repository Structure
 
+<details>
+<summary><b>Click to expand project tree</b></summary>
+
 ```
 DEFIGUARD/
-├── api.py                            # FastAPI backend server with normalization & SHAP endpoints
-├── requirements.txt                  # Python dependencies (PyTorch, XGBoost, SHAP, FastAPI)
+├── api.py                            # FastAPI backend (normalization & SHAP endpoints)
+├── requirements.txt                  # Python dependencies
 │
 ├── Phase 1/
 │   ├── scripts/
-│   │   ├── dataset_normalizer.py     # Universal Ethereum normalization & on-the-fly graph engine
+│   │   ├── dataset_normalizer.py     # Universal normalization & on-the-fly graph engine
 │   │   ├── inference.py              # Production tri-hybrid prediction class
-│   │   ├── 01_evaluate_100k_test.py  # Model test evaluation script
-│   │   └── 02_run_25k_stress_test.py # Out-of-sample stress test script
-│   ├── Phase 1 Models/               # Serialized model weights & feature artifacts
+│   │   ├── 01_evaluate_100k_test.py  # Model test evaluation
+│   │   └── 02_run_25k_stress_test.py # Out-of-sample stress test
+│   ├── Phase 1 Models/               # Serialized model & feature artifacts
 │   │   ├── master_hybrid_model.json  # Calibrated XGBoost model
 │   │   ├── gnn_wallet_embeddings.pkl # Pre-computed GraphSAGE embeddings
 │   │   ├── nts_map.pkl               # Temporal sequence mapping
@@ -162,92 +236,43 @@ DEFIGUARD/
 │   │   └── decision_threshold.json   # Calibrated audit threshold (0.200)
 │   └── Phase 1 Reports/              # Benchmark logs and SHAP plots
 │
-├── Frontend/                         # Modern React + Vite Web Application
+├── Frontend/                         # React + Vite web app
 │   ├── src/
-│   │   ├── App.jsx                   # Main layout and tab router
-│   │   ├── api.js                    # Backend REST API client
+│   │   ├── App.jsx                   # Layout and tab router
+│   │   ├── api.js                    # Backend REST client
 │   │   └── components/
-│   │       ├── DashboardOverview.jsx # Executive KPI dashboard & risk charts
-│   │       ├── UploadPanel.jsx       # CSV drag-and-drop & schema normalizer modal
-│   │       ├── AlertsTable.jsx       # Searchable alerts table with CSV export
-│   │       ├── NetworkGraph.jsx      # D3 interactive graph with Click-to-SHAP
-│   │       ├── ShapExplanation.jsx   # Dynamic SHAP bar charts & investigator narratives
-│   │       └── ModelInfo.jsx         # Architecture specs & feature breakdown
+│   │       ├── DashboardOverview.jsx # KPI dashboard & risk charts
+│   │       ├── UploadPanel.jsx       # CSV upload & schema normalizer
+│   │       ├── AlertsTable.jsx       # Searchable alerts + CSV export
+│   │       ├── NetworkGraph.jsx      # D3 graph with Click-to-SHAP
+│   │       ├── ShapExplanation.jsx   # SHAP bars & investigator narratives
+│   │       └── ModelInfo.jsx         # Architecture & feature breakdown
 │   ├── package.json
 │   └── vite.config.js
 │
 └── data/                             # Raw and processed evaluation samples
 ```
 
----
-
-## 🚀 Quick Start Guide
-
-### 1. Prerequisites
-- Python 3.10+
-- Node.js 18+ and npm
-- Windows, macOS, or Linux
-
-### 2. Backend Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/Lazarus-57/DeFIGuard.git
-cd DeFiGuard
-
-# Create and activate Python virtual environment
-python -m venv .venv
-# On Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-# On macOS/Linux:
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-pip install shap "xgboost==2.1.4" fastapi uvicorn python-multipart
-
-# Launch the FastAPI backend server
-python -m uvicorn api:app --port 8000
-```
-Backend API will be active at: `http://127.0.0.1:8000` (API documentation at `http://127.0.0.1:8000/docs`).
-
-### 3. Frontend Setup
-
-In a separate terminal:
-
-```bash
-cd Frontend
-npm install
-npm run dev
-```
-Open your browser and navigate to: **`http://localhost:3000`**
+</details>
 
 ---
 
-## 🔍 How to Test arbitrary Datasets
+## 📚 Citation
 
-1. Open the DeFiGuard Web Dashboard (`http://localhost:3000`).
-2. Navigate to the **Upload** tab.
-3. Upload any Ethereum transaction CSV (or click one of the pre-configured sample cards for **Etherscan**, **Google BigQuery**, or **Dune**).
-4. Watch the **Dataset Ingestion Intelligence** engine automatically:
-   - Identify the source provider and canonicalize address headers.
-   - Scale Wei values to ETH.
-   - Construct the wallet graph topology on the fly.
-5. Inspect the generated **Executive Dashboard**, explore the **D3 Network Graph**, click any flagged node to open the **TreeSHAP local explanation drawer**, and download the forensic CSV report.
+Built as a senior Capstone Research Project at PES University on Explainable Deep Learning & Graph Intelligence for DeFi Anti-Money Laundering.
 
----
-
-## ⚖️ License & Academic Citation
-
-Built as a senior Capstone Research Project at PES University on Explainable Deep Learning & Graph Intelligence for Decentralized Finance (DeFi) Anti-Money Laundering.
-
-If referencing this work in academic research, cite as:
 ```bibtex
 @misc{defiguard2026,
-  author = {Joshua Daniel and Project Contributors},
-  title = {DeFiGuard: Explainable Graph-Temporal AML Intelligence for Decentralized Finance},
-  year = {2026},
-  publisher = {GitHub},
+  author       = {Joshua Daniel and Project Contributors},
+  title        = {DeFiGuard: Explainable Graph-Temporal AML Intelligence for Decentralized Finance},
+  year         = {2026},
+  publisher    = {GitHub},
   howpublished = {\url{https://github.com/Lazarus-57/DeFIGuard}}
 }
 ```
+
+<div align="center">
+
+**🛡️ DeFiGuard** — *Catch the launderers. Spare the legitimate.*
+
+</div>
