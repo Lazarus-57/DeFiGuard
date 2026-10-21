@@ -4,8 +4,6 @@
 
 ### Explainable Graph-Temporal AML Intelligence for DeFi
 
-*Detect laundering. Classify the pattern. Explain **why**.*
-
 <br/>
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
@@ -273,6 +271,6 @@ Built as a senior Capstone Research Project at PES University on Explainable Dee
 
 <div align="center">
 
-**🛡️ DeFiGuard** — *Catch the launderers. Spare the legitimate.*
+**🛡️ DeFiGuard**
 
 </div>
