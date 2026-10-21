@@ -21,6 +21,19 @@ export async function uploadCSV(file) {
 }
 
 /**
+ * Preview dataset normalization and schema detection.
+ * POST /normalize-preview (multipart/form-data)
+ */
+export async function previewNormalize(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const resp = await api.post('/normalize-preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return resp.data;
+}
+
+/**
  * Load and predict on a preloaded sample dataset.
  * GET /samples/{sampleId}
  */

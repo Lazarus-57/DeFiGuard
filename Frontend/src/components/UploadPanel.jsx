@@ -1,17 +1,31 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { Upload, FileText, Database, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, Database, AlertTriangle, Sparkles, Layers, Cpu } from 'lucide-react';
 import { uploadCSV, loadSample } from '../api';
 
 const SAMPLES = [
   {
     id: 'sample_100k_test',
     title: '100k Gold Standard Test',
-    description: '120 transactions — Peel + Smurf + Circular + Normal (full features)',
+    tag: 'Native Processed',
+    description: '120 transactions with full pre-computed features (Peel + Smurf + Circular + Normal)',
   },
   {
-    id: 'sample_raw_transfers',
-    title: 'Raw Ethereum Transfers',
-    description: '120 raw transfers — tx_hash, from, to, amount, block_time only',
+    id: 'sample_etherscan_raw',
+    title: 'Etherscan CSV Export',
+    tag: 'Etherscan Schema',
+    description: 'Raw Txhash, From, To, Value_IN(ETH), DateTime UTC — auto-aliased and graphed',
+  },
+  {
+    id: 'sample_dune_wei',
+    title: 'Dune Analytics Export',
+    tag: 'Wei Scale (10¹⁸)',
+    description: 'Raw transfers with amounts in Wei — automatically scaled to standard ETH',
+  },
+  {
+    id: 'sample_bigquery_raw',
+    title: 'Google BigQuery Export',
+    tag: 'BigQuery / Unix Epoch',
+    description: 'from_address, to_address, block_timestamp, uppercase hex — auto-harmonized',
   },
 ];
 
@@ -87,7 +101,7 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
       <div className="loading-overlay">
         <div className="spinner" />
         <p className="loading-overlay__text">
-          Running ML inference engine... Analyzing transactions with XGBoost + GNN + NTS hybrid model and computing SHAP explanations
+          Universal Normalizer active: Harmonizing schema, auto-scaling Wei → ETH, computing graph topological metrics & running ML inference with SHAP explanations...
         </p>
       </div>
     );
@@ -95,6 +109,21 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
 
   return (
     <div>
+      {/* Universal Normalizer Intelligence Banner */}
+      <div className="normalizer-banner mb-6">
+        <div className="normalizer-banner__icon">
+          <Sparkles size={20} className="text-cyan" />
+        </div>
+        <div className="normalizer-banner__content">
+          <div className="normalizer-banner__title">
+            Universal Ethereum Dataset Normalization Engine Active
+          </div>
+          <div className="normalizer-banner__desc">
+            DeFIGuard automatically standardizes arbitrary Ethereum CSVs: auto-detects Etherscan, Dune, BigQuery, or custom headers, scales Wei → ETH, and calculates graph topological metrics (PageRank, degrees, flow ratios) on the fly for raw datasets.
+          </div>
+        </div>
+      </div>
+
       {/* Upload Zone */}
       <div
         className={`upload-zone ${dragActive ? 'upload-zone--active' : ''}`}
@@ -112,16 +141,16 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
               {selectedFile.name}
             </div>
             <div className="upload-zone__sublabel">
-              {(selectedFile.size / 1024).toFixed(1)} KB — Ready to analyze
+              {(selectedFile.size / 1024).toFixed(1)} KB — Ready to normalize & analyze
             </div>
           </>
         ) : (
           <>
             <div className="upload-zone__label">
-              Drop your transaction CSV here, or click to browse
+              Drop any Ethereum transaction CSV here, or click to browse
             </div>
             <div className="upload-zone__sublabel">
-              Supports raw transfers (tx_hash, from, to, amount) or feature-engineered datasets
+              Accepts Etherscan, Dune Analytics, BigQuery, or custom raw transfers (auto-scales Wei & extracts graph metrics)
             </div>
           </>
         )}
@@ -139,7 +168,7 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button className="btn btn--primary" onClick={handleUpload} disabled={loading}>
             <Upload size={16} />
-            Analyze Transactions
+            Normalize & Analyze Transactions
           </button>
         </div>
       )}
@@ -152,12 +181,19 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
         </div>
       )}
 
-      {/* Sample Datasets */}
-      <div className="mt-6">
-        <div className="section-header">
-          <span className="text-sm text-muted">Or quick-load a sample dataset for testing:</span>
+      {/* Multi-Format Sample Datasets */}
+      <div className="mt-8">
+        <div className="section-header mb-3">
+          <div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Pre-Configured Multi-Format Test Datasets
+            </div>
+            <span className="text-xs text-muted">
+              Click any dataset below to test DeFIGuard's multi-format auto-normalization capability:
+            </span>
+          </div>
         </div>
-        <div className="samples-row">
+        <div className="samples-grid">
           {SAMPLES.map((s) => (
             <button
               key={s.id}
@@ -165,10 +201,17 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
               onClick={() => handleSampleLoad(s.id)}
               disabled={loading}
             >
-              <Database />
-              <div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{s.title}</div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{s.description}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Database size={16} className="text-cyan" />
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.85rem' }}>{s.title}</span>
+                </div>
+                <span className="badge badge--neutral" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
+                  {s.tag}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'left', lineHeight: 1.4 }}>
+                {s.description}
               </div>
             </button>
           ))}

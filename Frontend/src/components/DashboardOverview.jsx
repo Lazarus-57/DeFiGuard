@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Layers,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend);
@@ -33,7 +34,7 @@ const PATTERN_COLORS = {
   'Generic Baseline': '#7c3aed',
 };
 
-export default function DashboardOverview({ summary, resultCount }) {
+export default function DashboardOverview({ summary, resultCount, normalization }) {
   const statCards = useMemo(() => {
     if (!summary) return [];
     return [
@@ -109,6 +110,49 @@ export default function DashboardOverview({ summary, resultCount }) {
 
   return (
     <div>
+      {/* Normalization & Schema Intelligence Card */}
+      {normalization && normalization.detected_source && (
+        <div className="card mb-6" style={{ background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.05) 0%, rgba(99, 102, 241, 0.05) 100%)', borderColor: 'rgba(34, 211, 238, 0.25)' }}>
+          <div className="card__header" style={{ paddingBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="card__title" style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Sparkles size={16} style={{ color: 'var(--accent-cyan)' }} />
+              Dataset Ingestion & Normalization Intelligence
+            </span>
+            <span className="badge badge--primary" style={{ textTransform: 'none', letterSpacing: 0, fontSize: '0.75rem' }}>
+              {normalization.detected_source}
+            </span>
+          </div>
+          <div className="card__body" style={{ paddingTop: 4 }}>
+            <div className="grid-4" style={{ gap: 12 }}>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source Schema</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2, fontSize: '0.85rem' }}>
+                  {normalization.detected_source}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Unit Harmonization</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2, fontSize: '0.85rem' }}>
+                  {normalization.unit_conversion}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Graph Topology</div>
+                <div style={{ fontWeight: 600, color: 'var(--accent-cyan)', marginTop: 2, fontSize: '0.85rem' }}>
+                  {normalization.graph_features_generated ? `⚡ Generated on-the-fly (${normalization.wallet_count?.toLocaleString()} wallets)` : 'Pre-computed in dataset'}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mapped Canonical Columns</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2, fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}>
+                  {normalization.columns_mapped ? Object.keys(normalization.columns_mapped).length : 0} standard fields mapped
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stat Cards */}
       <div className="grid-4 mb-6">
         {statCards.map((s) => (

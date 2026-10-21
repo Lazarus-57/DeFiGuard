@@ -122,6 +122,7 @@ export default function App() {
             <DashboardOverview
               summary={data.summary}
               resultCount={data.count}
+              normalization={data.normalization}
             />
           </div>
         )}

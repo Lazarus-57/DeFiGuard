@@ -199,17 +199,35 @@ def list_samples():
     samples = [
         {
             "id": "sample_100k_test",
-            "title": "100k Gold Standard Test Sample (Peel + Smurf + Circular + Normal)",
-            "description": "Representative slice of 120 transactions from the untouched 100k test set with full feature set.",
+            "title": "100k Gold Standard Test (Native Format)",
+            "description": "Representative slice of 120 transactions with full pre-computed features.",
             "row_count": 120,
             "filename": "sample_100k_test.csv",
+            "format": "DeFIGuard Native",
         },
         {
-            "id": "sample_raw_transfers",
-            "title": "Raw Ethereum Transfers (tx_hash, from, to, amount, block_time)",
-            "description": "Un-engineered raw transfers testing real-time feature computation and GNN wallet lookup.",
-            "row_count": 120,
-            "filename": "sample_raw_transfers.csv",
+            "id": "sample_etherscan_raw",
+            "title": "Etherscan CSV Export (Raw Format)",
+            "description": "Raw Etherscan headers (Txhash, From, To, Value_IN(ETH), DateTime UTC) tested with auto-aliasing.",
+            "row_count": 100,
+            "filename": "sample_etherscan_raw.csv",
+            "format": "Etherscan Export",
+        },
+        {
+            "id": "sample_dune_wei",
+            "title": "Dune Analytics Export (Wei Scale)",
+            "description": "Raw Dune transfers with amounts in Wei (10^18) tested with auto-unit scaling.",
+            "row_count": 100,
+            "filename": "sample_dune_wei.csv",
+            "format": "Dune Analytics",
+        },
+        {
+            "id": "sample_bigquery_raw",
+            "title": "Google BigQuery Export (Unix Epoch)",
+            "description": "Google BigQuery public crypto schema (from_address, to_address, block_timestamp).",
+            "row_count": 100,
+            "filename": "sample_bigquery_raw.csv",
+            "format": "Google BigQuery",
         },
     ]
     return {"samples": samples}
@@ -226,7 +244,7 @@ def get_sample_data(sample_id: str):
         raise HTTPException(status_code=404, detail=f"Sample dataset '{sample_id}' not found")
 
     df = pd.read_csv(csv_path)
-    results_df = model_engine.predict(df)
+    results_df, norm_meta = model_engine.predict(df, return_metadata=True)
     graph_payload = model_engine.build_network_graph(results_df)
     summary_stats = _compute_summary_stats(results_df)
 
@@ -236,9 +254,34 @@ def get_sample_data(sample_id: str):
         "sample_id": sample_id,
         "count": len(records),
         "summary": summary_stats,
+        "normalization": norm_meta,
         "graph": graph_payload,
         "results": records,
     }
+
+
+@app.post("/normalize-preview")
+async def normalize_preview(file: UploadFile = File(...)):
+    """Previews dataset normalization, schema detection, and unit conversions without running full ML inference."""
+    if model_engine is None or not hasattr(model_engine, "normalizer"):
+        raise HTTPException(status_code=500, detail="Normalizer engine is not loaded.")
+    try:
+        contents = await file.read()
+        df = pd.read_csv(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {e}")
+
+    try:
+        norm_df, meta = model_engine.normalizer.normalize(df)
+        sample_rows = _sanitize_records(norm_df.head(5).to_dict(orient="records"))
+        return {
+            "filename": file.filename,
+            "metadata": meta,
+            "sample_normalized": sample_rows,
+        }
+    except Exception as e:
+        tb = traceback.format_exc()
+        raise HTTPException(status_code=400, detail=f"Dataset normalization failed: {e}\n{tb}")
 
 
 @app.post("/predict")
@@ -254,10 +297,10 @@ async def predict_csv(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {e}")
 
     if len(df) == 0:
-        return {"count": 0, "summary": {}, "graph": {"nodes": [], "edges": []}, "results": []}
+        return {"count": 0, "summary": {}, "normalization": {}, "graph": {"nodes": [], "edges": []}, "results": []}
 
     try:
-        results_df = model_engine.predict(df)
+        results_df, norm_meta = model_engine.predict(df, return_metadata=True)
         graph_payload = model_engine.build_network_graph(results_df)
         summary_stats = _compute_summary_stats(results_df)
         records = _sanitize_records(results_df.to_dict(orient="records"))
@@ -266,6 +309,7 @@ async def predict_csv(file: UploadFile = File(...)):
             "filename": file.filename,
             "count": len(records),
             "summary": summary_stats,
+            "normalization": norm_meta,
             "graph": graph_payload,
             "results": records,
         }
@@ -285,11 +329,11 @@ def predict_json(payload: TransactionBatch):
         raise HTTPException(status_code=500, detail="ML Model Engine is not loaded.")
 
     if not payload.transactions:
-        return {"count": 0, "summary": {}, "graph": {"nodes": [], "edges": []}, "results": []}
+        return {"count": 0, "summary": {}, "normalization": {}, "graph": {"nodes": [], "edges": []}, "results": []}
 
     try:
         df = pd.DataFrame(payload.transactions)
-        results_df = model_engine.predict(df)
+        results_df, norm_meta = model_engine.predict(df, return_metadata=True)
         graph_payload = model_engine.build_network_graph(results_df)
         summary_stats = _compute_summary_stats(results_df)
         records = _sanitize_records(results_df.to_dict(orient="records"))
@@ -297,6 +341,7 @@ def predict_json(payload: TransactionBatch):
         return {
             "count": len(records),
             "summary": summary_stats,
+            "normalization": norm_meta,
             "graph": graph_payload,
             "results": records,
         }

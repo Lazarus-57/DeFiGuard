@@ -8,6 +8,11 @@ import pandas as pd
 import shap
 import xgboost as xgb
 
+try:
+    from dataset_normalizer import EthereumDatasetNormalizer
+except ImportError:
+    from .dataset_normalizer import EthereumDatasetNormalizer
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 MODELS_DIR = SCRIPT_DIR.parent / "Phase 1 Models Hardened"
@@ -18,6 +23,8 @@ if not MODELS_DIR.exists():
 class DefiGuardInference:
     def __init__(self, models_dir: str | Path = MODELS_DIR):
         self.models_dir = Path(models_dir)
+        self.normalizer = EthereumDatasetNormalizer()
+        self.last_metadata = {}
         
         # Load XGBoost Model (Used for SHAP)
         self.model = xgb.XGBClassifier()
@@ -146,11 +153,17 @@ class DefiGuardInference:
                 f"Key risk drivers: {reasons_text}."
             )
 
-    def predict(self, df: pd.DataFrame, compute_detailed_shap: bool = True) -> pd.DataFrame:
+    def predict(
+        self,
+        df: pd.DataFrame,
+        compute_detailed_shap: bool = True,
+        normalize: bool = True,
+        return_metadata: bool = False,
+    ) -> pd.DataFrame | tuple:
         """
         Runs inference on a DataFrame of transactions.
         
-        Input: DataFrame with columns ['tx_hash', 'from', 'to', 'amount', ...]
+        Input: DataFrame with columns ['tx_hash', 'from', 'to', 'amount', ...] (supports any Ethereum format).
         Output: Same DataFrame with added columns:
             - suspicion_score (float 0-1)
             - aml_flag (int 0/1)
@@ -159,9 +172,25 @@ class DefiGuardInference:
             - shap_breakdown (dict: top positive/negative drivers, component sums, narrative)
         """
         if len(df) == 0:
-            return df.copy()
-            
-        results_df = df.copy()
+            empty_meta = {
+                "detected_source": "Empty Dataset",
+                "columns_mapped": {},
+                "unit_conversion": "N/A",
+                "graph_features_generated": False,
+                "wallet_count": 0,
+                "transaction_count": 0,
+            }
+            self.last_metadata = empty_meta
+            return (df.copy(), empty_meta) if return_metadata else df.copy()
+
+        # 0. Normalization & Schema Harmonization
+        if normalize:
+            norm_df, meta = self.normalizer.normalize(df)
+            self.last_metadata = meta
+            results_df = norm_df.copy()
+        else:
+            self.last_metadata = {"detected_source": "Raw / Bypassed", "unit_conversion": "N/A"}
+            results_df = df.copy()
         
         # 1. Feature Engineering
         X_base = self._prepare_base_features(results_df)
@@ -264,6 +293,8 @@ class DefiGuardInference:
         results_df["top_shap_reason"] = top_reasons
         results_df["shap_breakdown"] = shap_breakdowns
         
+        if return_metadata:
+            return results_df, self.last_metadata
         return results_df
 
     def build_network_graph(self, results_df: pd.DataFrame, max_nodes: int = 300) -> dict:
