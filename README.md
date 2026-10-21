@@ -239,7 +239,7 @@ Open your browser and navigate to: **`http://localhost:3000`**
 
 ## ⚖️ License & Academic Citation
 
-Built as a senior Capstone Research Project at College of Engineering on Explainable Deep Learning & Graph Intelligence for Decentralized Finance (DeFi) Anti-Money Laundering.
+Built as a senior Capstone Research Project at PES University on Explainable Deep Learning & Graph Intelligence for Decentralized Finance (DeFi) Anti-Money Laundering.
 
 If referencing this work in academic research, cite as:
 ```bibtex
