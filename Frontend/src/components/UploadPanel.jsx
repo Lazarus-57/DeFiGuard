@@ -1,69 +1,133 @@
-import React, { useRef, useState, useCallback } from 'react';
-import { Upload, FileText, Database, AlertTriangle, Sparkles, Layers, Cpu } from 'lucide-react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
+import {
+  Upload,
+  FileText,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+} from 'lucide-react';
 import { uploadCSV, loadSample } from '../api';
 
 const SAMPLES = [
   {
     id: 'sample_100k_test',
-    title: '100k Gold Standard Test',
-    tag: 'Native Processed',
-    description: '120 transactions with full pre-computed features (Peel + Smurf + Circular + Normal)',
+    title: 'Gold Standard Test',
+    tag: 'Native',
+    description: '120 pre-featured transactions covering peel, smurfing, circular and normal flows.',
   },
   {
     id: 'sample_etherscan_raw',
-    title: 'Etherscan CSV Export',
-    tag: 'Etherscan Schema',
-    description: 'Raw Txhash, From, To, Value_IN(ETH), DateTime UTC — auto-aliased and graphed',
+    title: 'Etherscan Export',
+    tag: 'Etherscan',
+    description: 'Raw Etherscan CSV columns, auto-mapped and graphed.',
   },
   {
     id: 'sample_dune_wei',
-    title: 'Dune Analytics Export',
-    tag: 'Wei Scale (10¹⁸)',
-    description: 'Raw transfers with amounts in Wei — automatically scaled to standard ETH',
+    title: 'Dune Export',
+    tag: 'Wei scale',
+    description: 'Amounts in Wei, automatically scaled to ETH.',
   },
   {
     id: 'sample_bigquery_raw',
-    title: 'Google BigQuery Export',
-    tag: 'BigQuery / Unix Epoch',
-    description: 'from_address, to_address, block_timestamp, uppercase hex — auto-harmonized',
+    title: 'BigQuery Export',
+    tag: 'BigQuery',
+    description: 'Uppercase hex and Unix timestamps, auto-harmonized.',
   },
 ];
+
+const STAGES = [
+  'Detecting schema',
+  'Building wallet graph',
+  'Scoring transactions',
+  'Computing SHAP explanations',
+];
+
+function LoadingState() {
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 2500);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div className="loading-overlay">
+      <div className="loading-cyber-box">
+        <div className="spinner" />
+        <h3 className="loading-cyber-title">Analyzing</h3>
+        <div className="loading-steps-list">
+          {STAGES.map((label, i) => (
+            <div
+              key={label}
+              className={`loading-step ${i < stage ? 'loading-step--done' : ''} ${i === stage ? 'loading-step--active' : ''}`}
+            >
+              <CheckCircle2 size={14} style={{ opacity: i <= stage ? 1 : 0.25 }} />
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function UploadPanel({ onResults, setLoading, loading }) {
   const fileInputRef = useRef(null);
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [preflightInfo, setPreflightInfo] = useState(null);
   const [error, setError] = useState(null);
+
+  // Read the header locally to preview the detected schema
+  const inspectCSV = useCallback((file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const lines = String(e.target.result).split(/\r\n|\n/).filter((l) => l.trim().length > 0);
+        if (lines.length === 0) return;
+        const header = lines[0].toLowerCase();
+        const cols = lines[0].split(',').map((c) => c.replace(/['"]+/g, '').trim());
+
+        let detectedType = 'Generic CSV';
+        if (header.includes('value_in(eth)') || header.includes('txnhash') || header.includes('datetime (utc)')) {
+          detectedType = 'Etherscan';
+        } else if (header.includes('from_address') && header.includes('to_address') && header.includes('block_timestamp')) {
+          detectedType = 'BigQuery / Dune';
+        } else if (header.includes('transactionhash') && header.includes('callingfunction')) {
+          detectedType = 'XBlock-ETH';
+        }
+        setPreflightInfo({ columns: cols.length, detectedType });
+      } catch {
+        setPreflightInfo(null);
+      }
+    };
+    reader.readAsText(file.slice(0, 16384));
+  }, []);
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
+    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
+    else if (e.type === 'dragleave') setDragActive(false);
   }, []);
+
+  const acceptFile = useCallback((file) => {
+    setSelectedFile(file);
+    setError(null);
+    inspectCSV(file);
+  }, [inspectCSV]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     const file = e.dataTransfer.files?.[0];
-    if (file && file.name.endsWith('.csv')) {
-      setSelectedFile(file);
-      setError(null);
-    } else {
-      setError('Please upload a .csv file');
-    }
-  }, []);
+    if (file && file.name.toLowerCase().endsWith('.csv')) acceptFile(file);
+    else setError('Please upload a .csv file.');
+  }, [acceptFile]);
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setError(null);
-    }
+    if (file) acceptFile(file);
   };
 
   const handleUpload = async () => {
@@ -71,11 +135,9 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await uploadCSV(selectedFile);
-      onResults(data);
+      onResults(await uploadCSV(selectedFile));
     } catch (err) {
-      const detail = err.response?.data?.detail || err.message;
-      setError(`Upload failed: ${detail}`);
+      setError(`Upload failed: ${err.response?.data?.detail || err.message}`);
     } finally {
       setLoading(false);
     }
@@ -85,75 +147,57 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
     setLoading(true);
     setError(null);
     setSelectedFile(null);
+    setPreflightInfo(null);
     try {
-      const data = await loadSample(sampleId);
-      onResults(data);
+      onResults(await loadSample(sampleId));
     } catch (err) {
-      const detail = err.response?.data?.detail || err.message;
-      setError(`Failed to load sample: ${detail}`);
+      setError(`Failed to load sample: ${err.response?.data?.detail || err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="loading-overlay">
-        <div className="spinner" />
-        <p className="loading-overlay__text">
-          Universal Normalizer active: Harmonizing schema, auto-scaling Wei → ETH, computing graph topological metrics & running ML inference with SHAP explanations...
-        </p>
-      </div>
-    );
-  }
+  if (loading) return <LoadingState />;
 
   return (
     <div>
-      {/* Universal Normalizer Intelligence Banner */}
-      <div className="normalizer-banner mb-6">
-        <div className="normalizer-banner__icon">
-          <Sparkles size={20} className="text-cyan" />
-        </div>
-        <div className="normalizer-banner__content">
-          <div className="normalizer-banner__title">
-            Universal Ethereum Dataset Normalization Engine Active
-          </div>
-          <div className="normalizer-banner__desc">
-            DeFIGuard automatically standardizes arbitrary Ethereum CSVs: auto-detects Etherscan, Dune, BigQuery, or custom headers, scales Wei → ETH, and calculates graph topological metrics (PageRank, degrees, flow ratios) on the fly for raw datasets.
-          </div>
-        </div>
-      </div>
-
-      {/* Upload Zone */}
       <div
-        className={`upload-zone ${dragActive ? 'upload-zone--active' : ''}`}
+        className={`upload-zone ${dragActive ? 'upload-zone--active' : ''} ${selectedFile ? 'upload-zone--has-file' : ''}`}
         onDragEnter={handleDrag}
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
       >
-        <Upload className="upload-zone__icon" />
+        <div className="upload-zone__icon-glow">
+          <Upload className="upload-zone__icon" />
+        </div>
+
         {selectedFile ? (
           <>
-            <div className="upload-zone__label">
-              <FileText size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
-              {selectedFile.name}
+            <div className="flex items-center gap-2">
+              <FileText size={16} className="text-secondary" />
+              <span className="upload-zone__label">{selectedFile.name}</span>
             </div>
             <div className="upload-zone__sublabel">
-              {(selectedFile.size / 1024).toFixed(1)} KB — Ready to normalize & analyze
+              {(selectedFile.size / 1024).toFixed(1)} KB
             </div>
+            {preflightInfo && (
+              <div className="preflight-tags mt-2">
+                <span className="badge badge--info">{preflightInfo.detectedType}</span>
+                <span className="badge badge--neutral">{preflightInfo.columns} columns</span>
+              </div>
+            )}
           </>
         ) : (
           <>
-            <div className="upload-zone__label">
-              Drop any Ethereum transaction CSV here, or click to browse
-            </div>
+            <div className="upload-zone__label">Drop a CSV here, or click to browse</div>
             <div className="upload-zone__sublabel">
-              Accepts Etherscan, Dune Analytics, BigQuery, or custom raw transfers (auto-scales Wei & extracts graph metrics)
+              Etherscan, BigQuery, Dune or any raw EVM transfer export
             </div>
           </>
         )}
+
         <input
           ref={fileInputRef}
           type="file"
@@ -163,36 +207,23 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
         />
       </div>
 
-      {/* Upload Button */}
       {selectedFile && (
-        <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <button className="btn btn--primary" onClick={handleUpload} disabled={loading}>
-            <Upload size={16} />
-            Normalize & Analyze Transactions
+        <div style={{ textAlign: 'center', marginTop: 24 }}>
+          <button className="btn btn--primary btn--lg" onClick={handleUpload} disabled={loading}>
+            Run Analysis
           </button>
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div className="error-banner mt-4">
           <AlertTriangle />
-          {error}
+          <div>{error}</div>
         </div>
       )}
 
-      {/* Multi-Format Sample Datasets */}
       <div className="mt-8">
-        <div className="section-header mb-3">
-          <div>
-            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              Pre-Configured Multi-Format Test Datasets
-            </div>
-            <span className="text-xs text-muted">
-              Click any dataset below to test DeFIGuard's multi-format auto-normalization capability:
-            </span>
-          </div>
-        </div>
+        <div className="label mb-4">Sample datasets</div>
         <div className="samples-grid">
           {SAMPLES.map((s) => (
             <button
@@ -201,17 +232,15 @@ export default function UploadPanel({ onResults, setLoading, loading }) {
               onClick={() => handleSampleLoad(s.id)}
               disabled={loading}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Database size={16} className="text-cyan" />
-                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.85rem' }}>{s.title}</span>
-                </div>
-                <span className="badge badge--neutral" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
-                  {s.tag}
-                </span>
+              <div className="sample-btn__header">
+                <span className="sample-btn__title">{s.title}</span>
+                <span className="badge badge--neutral">{s.tag}</span>
               </div>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'left', lineHeight: 1.4 }}>
-                {s.description}
+              <div className="sample-btn__desc">{s.description}</div>
+              <div className="sample-btn__footer">
+                <span className="sample-btn__cta">
+                  Load <ArrowRight size={12} />
+                </span>
               </div>
             </button>
           ))}

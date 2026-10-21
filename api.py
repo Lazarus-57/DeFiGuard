@@ -155,7 +155,10 @@ def health():
 @app.get("/model-info")
 def model_info():
     """Returns Phase 1 validation benchmarks, architecture breakdown, and threshold info."""
-    reports_file = PROJECT_ROOT / "Phase 1" / "Phase 1 Reports" / "test_metrics.json"
+    reports_file = PROJECT_ROOT / "Phase 1" / "Phase 1 Reports Hardened" / "test_metrics.json"
+    if not reports_file.exists():
+        reports_file = PROJECT_ROOT / "Phase 1" / "Phase 1 Reports" / "test_metrics.json"
+
     metrics = {}
     if reports_file.exists():
         with open(reports_file, "r") as f:
@@ -164,12 +167,16 @@ def model_info():
     return {
         "model_type": "Hybrid Fusion (XGBoost + GraphSAGE GNN + NTS Temporal Intelligence)",
         "gold_standard_metrics": {
-            "roc_auc": metrics.get("test_roc_auc", 0.933),
-            "recall": metrics.get("test_recall", 0.9686),
-            "precision": metrics.get("test_precision", 0.4427),
-            "f1_score": metrics.get("test_f1", 0.6076),
-            "pr_auc": metrics.get("test_pr_auc", 0.4694),
-            "decision_threshold": metrics.get("decision_threshold", 0.4485),
+            "roc_auc": metrics.get("test_roc_auc", 0.8681),
+            "recall": metrics.get("test_recall", 0.9856),
+            "precision": metrics.get("test_precision", 0.2671),
+            "f1_score": metrics.get("test_f1", 0.4203),
+            "pr_auc": metrics.get("test_pr_auc", 0.2841),
+            "decision_threshold": metrics.get("decision_threshold", 0.2000),
+            "brier_score": metrics.get("brier_score_loss", 0.0644),
+            "precision_at_01": metrics.get("precision_at_0.1pct", 0.75),
+            "precision_at_05": metrics.get("precision_at_0.5pct", 0.6951),
+            "precision_at_10": metrics.get("precision_at_1.0pct", 0.3879),
         },
         "topology_coverage": [
             {

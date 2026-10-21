@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Doughnut, Bar } from 'react-chartjs-2';
+import React, { useMemo, useRef } from 'react';
+import { Doughnut, Bar, getElementAtEvent } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   ArcElement,
@@ -9,62 +9,57 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import {
-  Activity,
-  AlertTriangle,
-  Shield,
-  Wallet,
-  BarChart3,
-  TrendingUp,
-  Layers,
-  Zap,
-  Sparkles,
-} from 'lucide-react';
+import ExecutiveThreatMeter from './ExecutiveThreatMeter';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
-// Chart.js default dark theme overrides
-ChartJS.defaults.color = '#8b97b0';
-ChartJS.defaults.borderColor = 'rgba(100, 120, 160, 0.12)';
+ChartJS.defaults.color = '#7d8696';
+ChartJS.defaults.borderColor = 'rgba(255, 255, 255, 0.06)';
+ChartJS.defaults.font.family = "'Inter', sans-serif";
 
 const PATTERN_COLORS = {
-  'Normal': '#10b981',
-  'Smurfing (Structural)': '#f43f5e',
-  'Peel/Circular (Temporal)': '#f59e0b',
-  'Generic Baseline': '#7c3aed',
+  'Normal': '#34d399',
+  'Smurfing (Structural)': '#ff5468',
+  'Peel/Circular (Temporal)': '#f5a524',
+  'Generic Baseline': '#9b8cff',
 };
 
-export default function DashboardOverview({ summary, resultCount, normalization }) {
+const SCORE_COLORS = ['#34d399', '#5fd0ff', '#f5a524', '#fb7a3c', '#ff5468'];
+
+const fmt = (n, d = 2) =>
+  (n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+
+export default function DashboardOverview({ summary, normalization, onDrillDown }) {
+  const donutRef = useRef(null);
+  const barRef = useRef(null);
+
   const statCards = useMemo(() => {
     if (!summary) return [];
+    const total = summary.total_transactions || 1;
     return [
       {
-        label: 'Total Transactions',
+        label: 'Transactions',
         value: summary.total_transactions?.toLocaleString() ?? '—',
         color: 'cyan',
-        icon: Activity,
-        sub: `Analyzed from uploaded dataset`,
+        sub: 'Analyzed',
       },
       {
-        label: 'Flagged (Suspicious)',
+        label: 'Flagged',
         value: summary.flagged_transactions?.toLocaleString() ?? '—',
         color: 'rose',
-        icon: AlertTriangle,
         sub: `${summary.alert_rate_percentage ?? 0}% alert rate`,
       },
       {
-        label: 'Clean Transactions',
+        label: 'Clean',
         value: summary.clean_transactions?.toLocaleString() ?? '—',
         color: 'emerald',
-        icon: Shield,
-        sub: 'Passed below AML threshold',
+        sub: `${(((summary.clean_transactions ?? 0) / total) * 100).toFixed(1)}% of total`,
       },
       {
-        label: 'High Risk Wallets',
+        label: 'High-risk wallets',
         value: summary.high_risk_wallets_count?.toLocaleString() ?? '—',
         color: 'amber',
-        icon: Wallet,
-        sub: `Avg score: ${(summary.average_suspicion_score ?? 0).toFixed(4)}`,
+        sub: `Avg score ${(summary.average_suspicion_score ?? 0).toFixed(4)}`,
       },
     ];
   }, [summary]);
@@ -72,154 +67,116 @@ export default function DashboardOverview({ summary, resultCount, normalization 
   const patternData = useMemo(() => {
     if (!summary?.pattern_distribution) return null;
     const labels = Object.keys(summary.pattern_distribution);
-    const values = Object.values(summary.pattern_distribution);
     return {
       labels,
-      datasets: [
-        {
-          data: values,
-          backgroundColor: labels.map((l) => PATTERN_COLORS[l] || '#6366f1'),
-          borderWidth: 0,
-          hoverOffset: 6,
-        },
-      ],
+      datasets: [{
+        data: Object.values(summary.pattern_distribution),
+        backgroundColor: labels.map((l) => PATTERN_COLORS[l] || '#6b7280'),
+        borderWidth: 3,
+        borderColor: '#0a0d13',
+        hoverOffset: 4,
+      }],
     };
   }, [summary]);
 
   const scoreData = useMemo(() => {
     if (!summary?.score_distribution) return null;
-    const labels = Object.keys(summary.score_distribution);
-    const values = Object.values(summary.score_distribution);
-    const barColors = ['#10b981', '#22d3ee', '#f59e0b', '#f97316', '#f43f5e'];
     return {
-      labels,
-      datasets: [
-        {
-          label: 'Transactions',
-          data: values,
-          backgroundColor: barColors.map((c) => c + '99'),
-          borderColor: barColors,
-          borderWidth: 1,
-          borderRadius: 4,
-        },
-      ],
+      labels: Object.keys(summary.score_distribution),
+      datasets: [{
+        label: 'Transactions',
+        data: Object.values(summary.score_distribution),
+        backgroundColor: SCORE_COLORS.map((c) => c + '99'),
+        hoverBackgroundColor: SCORE_COLORS,
+        borderRadius: 2,
+        borderSkipped: false,
+      }],
     };
   }, [summary]);
 
+  const handleDonutClick = (event) => {
+    if (!donutRef.current || !onDrillDown) return;
+    const els = getElementAtEvent(donutRef.current, event);
+    if (els?.length) onDrillDown({ type: 'pattern', value: patternData.labels[els[0].index] });
+  };
+
+  const handleBarClick = (event) => {
+    if (!barRef.current || !onDrillDown) return;
+    const els = getElementAtEvent(barRef.current, event);
+    if (els?.length) onDrillDown({ type: 'score', value: scoreData.labels[els[0].index] });
+  };
+
   if (!summary) return null;
+
+  const normItems = normalization?.detected_source
+    ? [
+        ['Source', normalization.detected_source],
+        ['Units', normalization.unit_conversion],
+        [
+          'Graph',
+          normalization.graph_features_generated
+            ? `Built on the fly · ${normalization.wallet_count?.toLocaleString()} wallets`
+            : 'Pre-computed',
+        ],
+        [
+          'Columns mapped',
+          normalization.columns_mapped ? Object.keys(normalization.columns_mapped).length : 0,
+        ],
+      ]
+    : [];
 
   return (
     <div>
-      {/* Normalization & Schema Intelligence Card */}
-      {normalization && normalization.detected_source && (
-        <div className="card mb-6" style={{ background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.05) 0%, rgba(99, 102, 241, 0.05) 100%)', borderColor: 'rgba(34, 211, 238, 0.25)' }}>
-          <div className="card__header" style={{ paddingBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="card__title" style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles size={16} style={{ color: 'var(--accent-cyan)' }} />
-              Dataset Ingestion & Normalization Intelligence
-            </span>
-            <span className="badge badge--primary" style={{ textTransform: 'none', letterSpacing: 0, fontSize: '0.75rem' }}>
-              {normalization.detected_source}
-            </span>
-          </div>
-          <div className="card__body" style={{ paddingTop: 4 }}>
-            <div className="grid-4" style={{ gap: 12 }}>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source Schema</div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2, fontSize: '0.85rem' }}>
-                  {normalization.detected_source}
-                </div>
-              </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Unit Harmonization</div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2, fontSize: '0.85rem' }}>
-                  {normalization.unit_conversion}
-                </div>
-              </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Graph Topology</div>
-                <div style={{ fontWeight: 600, color: 'var(--accent-cyan)', marginTop: 2, fontSize: '0.85rem' }}>
-                  {normalization.graph_features_generated ? `⚡ Generated on-the-fly (${normalization.wallet_count?.toLocaleString()} wallets)` : 'Pre-computed in dataset'}
-                </div>
-              </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mapped Canonical Columns</div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: 2, fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}>
-                  {normalization.columns_mapped ? Object.keys(normalization.columns_mapped).length : 0} standard fields mapped
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ExecutiveThreatMeter summary={summary} />
 
-      {/* Stat Cards */}
+      {/* Key figures */}
       <div className="grid-4 mb-6">
         {statCards.map((s) => (
-          <div className="card stat-card" key={s.label}>
-            <div className="flex items-center justify-between">
-              <span className="stat-card__label">{s.label}</span>
-              <s.icon size={18} style={{ color: `var(--accent-${s.color})`, opacity: 0.7 }} />
-            </div>
+          <div className="card stat-card stat-card--interactive" key={s.label}>
+            <span className="stat-card__label">{s.label}</span>
             <span className={`stat-card__value stat-card__value--${s.color}`}>{s.value}</span>
             <span className="stat-card__sub">{s.sub}</span>
           </div>
         ))}
       </div>
 
-      {/* Volume Stats Row */}
       <div className="grid-3 mb-6">
         <div className="card stat-card">
-          <span className="stat-card__label">Total Volume</span>
-          <span className="stat-card__value" style={{ fontSize: '1.3rem' }}>
-            <TrendingUp size={18} style={{ color: 'var(--accent-cyan)', marginRight: 6, verticalAlign: 'text-bottom' }} />
-            {(summary.total_volume_eth ?? 0).toFixed(4)} ETH
-          </span>
+          <span className="stat-card__label">Total volume</span>
+          <span className="stat-card__value" style={{ fontSize: '1.4rem' }}>{fmt(summary.total_volume_eth)} ETH</span>
         </div>
         <div className="card stat-card">
-          <span className="stat-card__label">Flagged Volume</span>
-          <span className="stat-card__value stat-card__value--rose" style={{ fontSize: '1.3rem' }}>
-            <Zap size={18} style={{ color: 'var(--accent-rose)', marginRight: 6, verticalAlign: 'text-bottom' }} />
-            {(summary.flagged_volume_eth ?? 0).toFixed(4)} ETH
-          </span>
+          <span className="stat-card__label">Flagged volume</span>
+          <span className="stat-card__value stat-card__value--rose" style={{ fontSize: '1.4rem' }}>{fmt(summary.flagged_volume_eth)} ETH</span>
         </div>
         <div className="card stat-card">
-          <span className="stat-card__label">Detection Layers</span>
-          <span className="stat-card__value stat-card__value--purple" style={{ fontSize: '1.3rem' }}>
-            <Layers size={18} style={{ color: 'var(--accent-purple)', marginRight: 6, verticalAlign: 'text-bottom' }} />
-            3 Hybrid
-          </span>
-          <span className="stat-card__sub">GNN + NTS + XGBoost Baseline</span>
+          <span className="stat-card__label">Detection</span>
+          <span className="stat-card__value" style={{ fontSize: '1.4rem' }}>GNN · NTS · XGBoost</span>
         </div>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid-2">
-        {/* Pattern Distribution Donut */}
+      {/* Charts */}
+      <div className="grid-2 mb-6">
         <div className="card">
           <div className="card__header">
-            <span className="card__title">
-              <BarChart3 /> Pattern Distribution
-            </span>
+            <span className="card__title">Pattern distribution</span>
+            <span className="drilldown-hint">Click to filter</span>
           </div>
-          <div className="card__body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 260 }}>
+          <div className="card__body" style={{ display: 'flex', justifyContent: 'center', minHeight: 300 }}>
             {patternData ? (
-              <div style={{ width: 260, height: 260 }}>
+              <div style={{ width: 280, height: 280, cursor: 'pointer' }}>
                 <Doughnut
+                  ref={donutRef}
                   data={patternData}
+                  onClick={handleDonutClick}
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
-                    cutout: '65%',
+                    cutout: '72%',
                     plugins: {
                       legend: {
                         position: 'bottom',
-                        labels: {
-                          padding: 14,
-                          usePointStyle: true,
-                          pointStyleWidth: 10,
-                          font: { size: 11, family: "'Inter', sans-serif" },
-                        },
+                        labels: { padding: 16, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 } },
                       },
                     },
                   }}
@@ -231,35 +188,26 @@ export default function DashboardOverview({ summary, resultCount, normalization 
           </div>
         </div>
 
-        {/* Score Distribution Bar */}
         <div className="card">
           <div className="card__header">
-            <span className="card__title">
-              <Activity /> Risk Score Distribution
-            </span>
+            <span className="card__title">Risk score distribution</span>
+            <span className="drilldown-hint">Click to filter</span>
           </div>
-          <div className="card__body" style={{ minHeight: 260 }}>
+          <div className="card__body" style={{ height: 346, cursor: 'pointer' }}>
             {scoreData ? (
               <Bar
+                ref={barRef}
                 data={scoreData}
+                onClick={handleBarClick}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: false },
-                  },
+                  plugins: { legend: { display: false } },
                   scales: {
-                    x: {
-                      grid: { display: false },
-                      ticks: { font: { size: 10 } },
-                    },
-                    y: {
-                      grid: { color: 'rgba(100,120,160,0.08)' },
-                      ticks: { font: { size: 10 } },
-                    },
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: { ticks: { font: { size: 10 } } },
                   },
                 }}
-                height={220}
               />
             ) : (
               <span className="text-muted text-sm">No score data</span>
@@ -267,6 +215,25 @@ export default function DashboardOverview({ summary, resultCount, normalization 
           </div>
         </div>
       </div>
+
+      {/* Ingestion summary */}
+      {normItems.length > 0 && (
+        <div className="card">
+          <div className="card__header">
+            <span className="card__title">Ingestion</span>
+          </div>
+          <div className="card__body">
+            <div className="grid-4">
+              {normItems.map(([label, value]) => (
+                <div className="intelligence-chip" key={label}>
+                  <div className="intelligence-chip__label">{label}</div>
+                  <div className="intelligence-chip__val">{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
