@@ -9,6 +9,13 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import {
+  UserCheck,
+  ShieldAlert,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+} from 'lucide-react';
 import ExecutiveThreatMeter from './ExecutiveThreatMeter';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Tooltip, Legend);
@@ -29,7 +36,13 @@ const SCORE_COLORS = ['#34d399', '#5fd0ff', '#f5a524', '#fb7a3c', '#ff5468'];
 const fmt = (n, d = 2) =>
   (n ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export default function DashboardOverview({ summary, normalization, onDrillDown }) {
+export default function DashboardOverview({
+  summary,
+  results = [],
+  normalization,
+  reviews = {},
+  onDrillDown,
+}) {
   const donutRef = useRef(null);
   const barRef = useRef(null);
 
@@ -106,6 +119,42 @@ export default function DashboardOverview({ summary, normalization, onDrillDown 
     if (els?.length) onDrillDown({ type: 'score', value: scoreData.labels[els[0].index] });
   };
 
+  const triageStats = useMemo(() => {
+    if (!results || results.length === 0) return null;
+    let needsReview = 0;
+    let critical = 0;
+    let cleared = 0;
+    let escalated = 0;
+
+    results.forEach((r) => {
+      const rev = reviews[r.tx_hash];
+      if (rev?.status === 'cleared') {
+        cleared++;
+      } else if (rev?.status === 'escalated') {
+        escalated++;
+      } else if (r.aml_flag === 1) {
+        if ((r.suspicion_score ?? 0) < 0.45) {
+          needsReview++;
+        } else {
+          critical++;
+        }
+      }
+    });
+
+    const totalReviewed = cleared + escalated;
+    const totalFlagged = summary?.flagged_transactions || 1;
+    const progressPct = Math.round((totalReviewed / totalFlagged) * 100);
+
+    return {
+      needsReview,
+      critical,
+      cleared,
+      escalated,
+      totalReviewed,
+      progressPct: Math.min(100, progressPct),
+    };
+  }, [results, reviews, summary]);
+
   if (!summary) return null;
 
   const normItems = normalization?.detected_source
@@ -128,6 +177,84 @@ export default function DashboardOverview({ summary, normalization, onDrillDown 
   return (
     <div>
       <ExecutiveThreatMeter summary={summary} />
+
+      {/* Analyst Triage Strip */}
+      {triageStats && (
+        <div className="card dashboard-triage-strip mb-6">
+          <div className="flex items-center gap-3">
+            <div
+              className="p-2 rounded-lg flex items-center justify-center"
+              style={{ background: 'rgba(95, 208, 255, 0.1)', color: '#5fd0ff', width: 36, height: 36 }}
+            >
+              <UserCheck size={18} />
+            </div>
+            <div>
+              <div className="text-sm font-semibold flex items-center gap-2">
+                <span>Analyst Adjudication & Triage</span>
+                {triageStats.totalReviewed > 0 && (
+                  <span className="badge badge--safe" style={{ fontSize: '0.68rem', padding: '2px 8px' }}>
+                    {triageStats.totalReviewed} Decided ({triageStats.progressPct}%)
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-muted">
+                Human-in-the-loop review queue for ambiguous borderline transactions (score 0.20 – 0.45)
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              className="triage-strip-stat triage-strip-stat--amber"
+              onClick={() => onDrillDown && onDrillDown({ type: 'triage', value: 'needs_review' })}
+              title="Filter transactions needing analyst review"
+            >
+              <AlertTriangle size={13} />
+              <span>Needs Review:</span>
+              <strong>{triageStats.needsReview.toLocaleString()}</strong>
+            </button>
+
+            <button
+              className="triage-strip-stat triage-strip-stat--rose"
+              onClick={() => onDrillDown && onDrillDown({ type: 'triage', value: 'critical' })}
+              title="Filter high-confidence critical alerts"
+            >
+              <ShieldAlert size={13} />
+              <span>Critical:</span>
+              <strong>{triageStats.critical.toLocaleString()}</strong>
+            </button>
+
+            <button
+              className="triage-strip-stat triage-strip-stat--emerald"
+              onClick={() => onDrillDown && onDrillDown({ type: 'triage', value: 'cleared' })}
+              title="Filter analyst-cleared false positives"
+            >
+              <CheckCircle2 size={13} />
+              <span>Cleared:</span>
+              <strong>{triageStats.cleared.toLocaleString()}</strong>
+            </button>
+
+            <button
+              className="triage-strip-stat triage-strip-stat--purple"
+              onClick={() => onDrillDown && onDrillDown({ type: 'triage', value: 'escalated' })}
+              title="Filter analyst-escalated SAR alerts"
+            >
+              <ShieldAlert size={13} />
+              <span>Escalated:</span>
+              <strong>{triageStats.escalated.toLocaleString()}</strong>
+            </button>
+
+            <button
+              className="btn btn--secondary btn--xs flex items-center gap-1"
+              onClick={() => onDrillDown && onDrillDown({ type: 'triage', value: 'needs_review' })}
+              style={{ marginLeft: 6 }}
+            >
+              <span>Queue</span>
+              <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Key figures */}
       <div className="grid-4 mb-6">

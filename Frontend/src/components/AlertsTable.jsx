@@ -13,8 +13,13 @@ import {
   X,
   Sparkles,
   Layers,
+  UserCheck,
+  ShieldAlert,
+  AlertTriangle,
+  FileCheck,
 } from 'lucide-react';
 import ShapExplainer from './ShapExplainer';
+import AnalystReviewPanel from './AnalystReviewPanel';
 
 const PAGE_SIZE = 25;
 
@@ -45,23 +50,31 @@ function PatternBadge({ pattern }) {
   return <span className="badge badge--purple">{pattern}</span>;
 }
 
-export default function AlertsTable({ results, activeDrillDown, onClearDrillDown }) {
+export default function AlertsTable({
+  results = [],
+  activeDrillDown,
+  onClearDrillDown,
+  reviews = {},
+  onSaveReview = () => {},
+  onClearReview = () => {},
+}) {
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState('suspicion_score');
   const [sortAsc, setSortAsc] = useState(false);
   const [filterFlagged, setFilterFlagged] = useState(false);
   const [filterPattern, setFilterPattern] = useState('all');
+  const [filterTriage, setFilterTriage] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedKey, setCopiedKey] = useState(null);
   const [selectedIdx, setSelectedIdx] = useState(null);
 
-  // Sync active drill-down from parent (if user clicked chart in Dashboard)
+  // Sync active drill-down from parent (if user clicked chart or triage badge in Dashboard)
   useEffect(() => {
     if (activeDrillDown) {
       if (activeDrillDown.type === 'pattern') {
         setFilterPattern(activeDrillDown.value);
-      } else if (activeDrillDown.type === 'score') {
-        // e.g. "0.2 - 0.4"
+      } else if (activeDrillDown.type === 'triage') {
+        setFilterTriage(activeDrillDown.value);
       }
       setPage(0);
     }
@@ -72,6 +85,31 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
     const s = new Set(results.map((r) => r.pattern_type).filter(Boolean));
     return Array.from(s);
   }, [results]);
+
+  // Triage queue counts
+  const triageCounts = useMemo(() => {
+    let needsReview = 0;
+    let critical = 0;
+    let cleared = 0;
+    let escalated = 0;
+
+    results.forEach((r) => {
+      const rev = reviews[r.tx_hash];
+      if (rev?.status === 'cleared') {
+        cleared++;
+      } else if (rev?.status === 'escalated') {
+        escalated++;
+      } else if (r.aml_flag === 1) {
+        if ((r.suspicion_score ?? 0) < 0.45) {
+          needsReview++;
+        } else {
+          critical++;
+        }
+      }
+    });
+
+    return { needsReview, critical, cleared, escalated };
+  }, [results, reviews]);
 
   // Filter & sort
   const filtered = useMemo(() => {
@@ -91,13 +129,29 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
     if (filterFlagged) data = data.filter((r) => r.aml_flag === 1);
     if (filterPattern !== 'all') data = data.filter((r) => r.pattern_type === filterPattern);
 
+    // Triage Queue filtering
+    if (filterTriage === 'needs_review') {
+      data = data.filter(
+        (r) => r.aml_flag === 1 && (r.suspicion_score ?? 0) < 0.45 && !reviews[r.tx_hash]
+      );
+    } else if (filterTriage === 'critical') {
+      data = data.filter(
+        (r) => r.aml_flag === 1 && (r.suspicion_score ?? 0) >= 0.45 && !reviews[r.tx_hash]
+      );
+    } else if (filterTriage === 'cleared') {
+      data = data.filter((r) => reviews[r.tx_hash]?.status === 'cleared');
+    } else if (filterTriage === 'escalated') {
+      data = data.filter((r) => reviews[r.tx_hash]?.status === 'escalated');
+    }
+
     // Search query matching (tx_hash, from, to)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      data = data.filter((r) =>
-        (r.tx_hash && r.tx_hash.toLowerCase().includes(q)) ||
-        (r.from && r.from.toLowerCase().includes(q)) ||
-        (r.to && r.to.toLowerCase().includes(q))
+      data = data.filter(
+        (r) =>
+          (r.tx_hash && r.tx_hash.toLowerCase().includes(q)) ||
+          (r.from && r.from.toLowerCase().includes(q)) ||
+          (r.to && r.to.toLowerCase().includes(q))
       );
     }
 
@@ -108,7 +162,7 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
       return sortAsc ? va - vb : vb - va;
     });
     return data;
-  }, [results, filterFlagged, filterPattern, searchQuery, sortKey, sortAsc, activeDrillDown]);
+  }, [results, filterFlagged, filterPattern, filterTriage, searchQuery, sortKey, sortAsc, activeDrillDown, reviews]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -151,6 +205,47 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
     URL.revokeObjectURL(url);
   };
 
+  const handleExportAuditTrail = () => {
+    const reviewedRows = results
+      .filter((r) => reviews[r.tx_hash])
+      .map((r) => ({
+        tx_hash: r.tx_hash,
+        from_address: r.from,
+        to_address: r.to,
+        amount_eth: r.amount,
+        block_time: r.block_time,
+        model_risk_score: r.suspicion_score,
+        model_pattern: r.pattern_type,
+        model_top_driver: r.top_shap_reason,
+        dominant_layer: r.shap_breakdown?.dominant_layer || 'N/A',
+        analyst_decision: reviews[r.tx_hash]?.status,
+        compliance_reason: reviews[r.tx_hash]?.reason,
+        case_notes: reviews[r.tx_hash]?.note,
+        reviewed_at: reviews[r.tx_hash]?.reviewedAt,
+        analyst: reviews[r.tx_hash]?.analyst,
+      }));
+
+    if (reviewedRows.length === 0) {
+      alert('No analyst determinations recorded yet. Click on any flagged transaction row below to clear or escalate it first.');
+      return;
+    }
+
+    const payload = {
+      report: 'DeFIGuard Human-in-the-Loop AML Triage Audit Trail',
+      exported_at: new Date().toISOString(),
+      total_determinations: reviewedRows.length,
+      determinations: reviewedRows,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `defiguard_triage_audit_trail_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const selectedTransaction = selectedIdx !== null ? filtered[selectedIdx] : null;
 
   return (
@@ -166,6 +261,7 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
             className="btn btn--secondary btn--xs"
             onClick={() => {
               setFilterPattern('all');
+              setFilterTriage('all');
               if (onClearDrillDown) onClearDrillDown();
             }}
           >
@@ -173,6 +269,58 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
           </button>
         </div>
       )}
+
+      {/* ── Triage Queue Fast Selector Bar ── */}
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <span className="label" style={{ marginRight: 6 }}>Triage Queue:</span>
+        <button
+          type="button"
+          className={`triage-filter-pill ${filterTriage === 'all' ? 'triage-filter-pill--active' : ''}`}
+          onClick={() => { setFilterTriage('all'); setPage(0); }}
+        >
+          <span>All ({results.length.toLocaleString()})</span>
+        </button>
+
+        <button
+          type="button"
+          className={`triage-filter-pill ${filterTriage === 'needs_review' ? 'triage-filter-pill--active' : ''}`}
+          onClick={() => { setFilterTriage('needs_review'); setPage(0); }}
+          style={{ borderColor: filterTriage === 'needs_review' ? 'var(--accent-amber)' : undefined }}
+        >
+          <AlertTriangle size={11} style={{ color: 'var(--accent-amber)' }} />
+          <span>Needs Review ({triageCounts.needsReview.toLocaleString()})</span>
+        </button>
+
+        <button
+          type="button"
+          className={`triage-filter-pill ${filterTriage === 'critical' ? 'triage-filter-pill--active' : ''}`}
+          onClick={() => { setFilterTriage('critical'); setPage(0); }}
+          style={{ borderColor: filterTriage === 'critical' ? 'var(--accent-rose)' : undefined }}
+        >
+          <ShieldAlert size={11} style={{ color: 'var(--accent-rose)' }} />
+          <span>Critical Threat ({triageCounts.critical.toLocaleString()})</span>
+        </button>
+
+        <button
+          type="button"
+          className={`triage-filter-pill ${filterTriage === 'cleared' ? 'triage-filter-pill--active' : ''}`}
+          onClick={() => { setFilterTriage('cleared'); setPage(0); }}
+          style={{ borderColor: filterTriage === 'cleared' ? 'var(--accent-emerald)' : undefined }}
+        >
+          <Check size={11} style={{ color: 'var(--accent-emerald)' }} />
+          <span>Cleared by Analyst ({triageCounts.cleared.toLocaleString()})</span>
+        </button>
+
+        <button
+          type="button"
+          className={`triage-filter-pill ${filterTriage === 'escalated' ? 'triage-filter-pill--active' : ''}`}
+          onClick={() => { setFilterTriage('escalated'); setPage(0); }}
+          style={{ borderColor: filterTriage === 'escalated' ? 'var(--accent-rose)' : undefined }}
+        >
+          <FileCheck size={11} style={{ color: 'var(--accent-rose)' }} />
+          <span>Escalated ({triageCounts.escalated.toLocaleString()})</span>
+        </button>
+      </div>
 
       {/* ── Filters & Search Control Bar ── */}
       <div className="filters-bar card mb-4">
@@ -215,13 +363,22 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
           </select>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted" style={{ marginRight: 6 }}>
             {filtered.length.toLocaleString()} of {results.length.toLocaleString()}
           </span>
 
           <button className="btn btn--secondary btn--sm" onClick={handleExport}>
-            <Download size={14} /> Export CSV
+            <Download size={13} /> Export CSV
+          </button>
+
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={handleExportAuditTrail}
+            title="Download JSON compliance package with analyst determinations and SHAP drivers"
+          >
+            <FileCheck size={13} style={{ color: 'var(--accent-cyan)' }} />
+            <span>Audit Trail JSON</span>
           </button>
         </div>
       </div>
@@ -238,7 +395,7 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
                 <th onClick={() => handleSort('to')}>To <SortArrow col="to" /></th>
                 <th onClick={() => handleSort('amount')}>Amount <SortArrow col="amount" /></th>
                 <th onClick={() => handleSort('suspicion_score')}>Risk Score <SortArrow col="suspicion_score" /></th>
-                <th onClick={() => handleSort('aml_flag')}>Flag <SortArrow col="aml_flag" /></th>
+                <th onClick={() => handleSort('aml_flag')}>Triage Status <SortArrow col="aml_flag" /></th>
                 <th onClick={() => handleSort('pattern_type')}>Pattern <SortArrow col="pattern_type" /></th>
                 <th>Top driver</th>
               </tr>
@@ -254,6 +411,7 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
                 paged.map((r, i) => {
                   const globalIdx = page * PAGE_SIZE + i;
                   const isSelected = selectedIdx === globalIdx;
+                  const rev = reviews[r.tx_hash];
                   return (
                     <React.Fragment key={globalIdx}>
                       <tr
@@ -353,9 +511,21 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
                           <ScoreBar score={r.suspicion_score ?? 0} />
                         </td>
 
-                        {/* AML Flag */}
+                        {/* Triage Status */}
                         <td>
-                          {r.aml_flag === 1 ? (
+                          {rev?.status === 'cleared' ? (
+                            <span className="badge badge--safe" style={{ gap: 4 }}>
+                              <Check size={10} /> Cleared (Analyst)
+                            </span>
+                          ) : rev?.status === 'escalated' ? (
+                            <span className="badge badge--danger" style={{ gap: 4 }}>
+                              <AlertTriangle size={10} /> Escalated (SAR)
+                            </span>
+                          ) : r.aml_flag === 1 && (r.suspicion_score ?? 0) < 0.45 ? (
+                            <span className="badge badge--warn" style={{ gap: 4 }}>
+                              Needs Review
+                            </span>
+                          ) : r.aml_flag === 1 ? (
                             <span className="badge badge--danger">Flagged</span>
                           ) : (
                             <span className="badge badge--safe">Clean</span>
@@ -373,17 +543,27 @@ export default function AlertsTable({ results, activeDrillDown, onClearDrillDown
                         </td>
                       </tr>
 
-                      {/* Expandable SHAP Drawer Row */}
+                      {/* Expandable SHAP & Analyst Triage Drawer Row */}
                       {isSelected && (
                         <tr className="row--expanded">
                           <td colSpan={9} style={{ padding: '20px 24px', background: 'var(--bg-primary)' }}>
                             <div className="flex items-center justify-between mb-3">
-                              <span className="label">SHAP explanation</span>
+                              <span className="label">Forensic Evidence &amp; Human-in-the-Loop Determination</span>
                               <span className="text-xs font-mono text-muted">
                                 {r.tx_hash}
                               </span>
                             </div>
+
+                            {/* SHAP Feature Decomposition */}
                             <ShapExplainer transaction={r} />
+
+                            {/* Analyst Triage Decision Panel */}
+                            <AnalystReviewPanel
+                              transaction={r}
+                              currentReview={reviews[r.tx_hash]}
+                              onSaveReview={onSaveReview}
+                              onClearReview={onClearReview}
+                            />
                           </td>
                         </tr>
                       )}

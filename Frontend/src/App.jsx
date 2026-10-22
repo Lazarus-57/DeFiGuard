@@ -8,16 +8,20 @@ import {
   Cpu,
   FileSearch,
   RefreshCw,
+  Terminal,
 } from 'lucide-react';
 
+import LandingPage from './components/LandingPage';
 import UploadPanel from './components/UploadPanel';
 import DashboardOverview from './components/DashboardOverview';
 import AlertsTable from './components/AlertsTable';
 import NetworkGraph from './components/NetworkGraph';
 import ModelInfoPanel from './components/ModelInfoPanel';
+import { loadSample } from './api';
 
 const TABS = [
-  { id: 'upload', label: 'Upload', icon: Upload },
+  { id: 'overview', label: 'Overview', icon: Shield },
+  { id: 'upload', label: 'Analyze', icon: Upload },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'alerts', label: 'Alerts', icon: Table2 },
   { id: 'network', label: 'Network', icon: GitBranch },
@@ -37,14 +41,32 @@ function PageHeader({ title, subtitle, action }) {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('upload');
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
+  const [loadingDemo, setLoadingDemo] = useState(false);
   const [data, setData] = useState(null); // full API response
-  const [drillDownFilter, setDrillDownFilter] = useState(null); // { type: 'pattern' | 'score', value: string }
+  const [drillDownFilter, setDrillDownFilter] = useState(null); // { type: 'pattern' | 'score' | 'triage', value: string }
+  const [analystReviews, setAnalystReviews] = useState({}); // { [txHash]: { status: 'cleared'|'escalated', reason, notes, timestamp, analyst } }
+
+  const handleSaveReview = (txHash, reviewData) => {
+    setAnalystReviews((prev) => ({
+      ...prev,
+      [txHash]: reviewData,
+    }));
+  };
+
+  const handleClearReview = (txHash) => {
+    setAnalystReviews((prev) => {
+      const next = { ...prev };
+      delete next[txHash];
+      return next;
+    });
+  };
 
   const handleResults = (apiResponse) => {
     setData(apiResponse);
     setDrillDownFilter(null);
+    setAnalystReviews({});
     setActiveTab('dashboard');
   };
 
@@ -53,17 +75,35 @@ export default function App() {
     setActiveTab('alerts');
   };
 
+  const handleQuickDemo = async () => {
+    setLoadingDemo(true);
+    try {
+      const res = await loadSample('sample_100k_test');
+      handleResults(res);
+    } catch (err) {
+      console.error('Failed to load sample benchmark dataset', err);
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
+
   const hasResults = data && data.results && data.results.length > 0;
 
-  // Only Upload + Model are available until a dataset is analyzed
+  // Overview, Upload, and Model are available until a dataset is analyzed
   const availableTabs = hasResults
     ? TABS
-    : TABS.filter((t) => t.id === 'upload' || t.id === 'model');
+    : TABS.filter((t) => t.id === 'overview' || t.id === 'upload' || t.id === 'model');
 
   return (
     <>
       <nav className="topnav">
-        <div className="topnav__brand">
+        <div
+          className="topnav__brand"
+          onClick={() => setActiveTab('overview')}
+          style={{ cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+        >
           <Shield className="topnav__brand-icon" />
           <span className="topnav__brand-name">DeFIGuard</span>
         </div>
@@ -101,6 +141,14 @@ export default function App() {
       </nav>
 
       <main className="main-content">
+        {activeTab === 'overview' && (
+          <LandingPage
+            onNavigate={(tab) => setActiveTab(tab)}
+            onQuickDemo={handleQuickDemo}
+            loadingDemo={loadingDemo}
+          />
+        )}
+
         {activeTab === 'upload' && (
           <div>
             <PageHeader
@@ -123,7 +171,12 @@ export default function App() {
               action={
                 <button
                   className="btn btn--secondary btn--sm"
-                  onClick={() => { setData(null); setDrillDownFilter(null); setActiveTab('upload'); }}
+                  onClick={() => {
+                    setData(null);
+                    setDrillDownFilter(null);
+                    setAnalystReviews({});
+                    setActiveTab('upload');
+                  }}
                 >
                   <RefreshCw /> New Dataset
                 </button>
@@ -131,8 +184,10 @@ export default function App() {
             />
             <DashboardOverview
               summary={data.summary}
+              results={data.results}
               resultCount={data.count}
               normalization={data.normalization}
+              reviews={analystReviews}
               onDrillDown={handleDrillDown}
             />
           </div>
@@ -148,6 +203,9 @@ export default function App() {
               results={data.results}
               activeDrillDown={drillDownFilter}
               onClearDrillDown={() => setDrillDownFilter(null)}
+              reviews={analystReviews}
+              onSaveReview={handleSaveReview}
+              onClearReview={handleClearReview}
             />
           </div>
         )}
